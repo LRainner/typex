@@ -1,0 +1,20 @@
+# TypeX Configuration
+
+[asr]
+provider = "mock"         # mock | whisper-local | openai-compatible
+# endpoint = "http://localhost:8080/v1/asr"
+# model = "whisper-large-v3"
+
+[llm]
+enabled = false            # set true to enable text optimization
+provider = "mock"          # mock | llama-local | openai-compatible
+# endpoint = "http://localhost:8080/v1/chat/completions"
+# model = "gpt-4o-mini"
+# api_key = "sk-..."
+
+[pipeline]
+performance = "balanced"   # low | balanced | high
+plugins = ["filler_remover", "text_cleaner"]
+
+[injector]
+method = "clipboard"       # clipboard | platform

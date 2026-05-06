@@ -1,0 +1,42 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/asr",
+    "crates/llm",
+    "crates/pipeline",
+    "crates/injector",
+    "crates/config",
+    "crates/plugin",
+    "apps/cli",
+    "apps/desktop",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "BSL-1.1"
+repository = "https://github.com/LRainner/typex"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+futures = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+async-trait = "0.1"
+bytes = "1"
+
+# Internal crates
+typex-core = { path = "crates/core" }
+typex-asr = { path = "crates/asr" }
+typex-llm = { path = "crates/llm" }
+typex-pipeline = { path = "crates/pipeline" }
+typex-injector = { path = "crates/injector" }
+typex-config = { path = "crates/config" }
+typex-plugin = { path = "crates/plugin" }

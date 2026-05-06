@@ -1,0 +1,10 @@
+[package]
+name = "typex-desktop"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+typex-core = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
