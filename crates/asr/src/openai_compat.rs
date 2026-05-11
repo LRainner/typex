@@ -3,9 +3,13 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures::stream::{BoxStream, StreamExt};
 use serde::Deserialize;
-use tracing;
-
 use crate::{AsrProvider, AsrResult};
+
+// PCM format: 16kHz, 16-bit, mono — Whisper API standard
+const SAMPLE_RATE: u32 = 16000;
+const BITS_PER_SAMPLE: u16 = 16;
+const CHANNELS: u16 = 1;
+const BYTES_PER_SAMPLE: u16 = BITS_PER_SAMPLE / 8; // 2 bytes per sample
 
 /// OpenAI-compatible ASR provider (works with OpenAI, Groq, etc.).
 ///
@@ -16,7 +20,7 @@ pub struct OpenAiCompatibleAsrProvider {
     api_key: String,
     model: String,
     language: Option<String>,
-    /// Bytes per segment. Default: 3s of 16kHz 16-bit mono = 96000 bytes.
+    /// Bytes per segment. Default: 3s of 16kHz 16-bit mono.
     segment_bytes: usize,
     client: reqwest::Client,
 }
@@ -33,7 +37,7 @@ impl OpenAiCompatibleAsrProvider {
             api_key,
             model,
             language: None,
-            segment_bytes: 16000 * 2 * 3, // 16kHz * 2 bytes * 3 seconds
+            segment_bytes: (SAMPLE_RATE as usize) * (BYTES_PER_SAMPLE as usize) * (CHANNELS as usize) * 3,
             client: reqwest::Client::new(),
         }
     }
@@ -44,7 +48,7 @@ impl OpenAiCompatibleAsrProvider {
     }
 
     pub fn with_segment_duration(mut self, seconds: f32) -> Self {
-        self.segment_bytes = (16000.0 * 2.0 * seconds) as usize;
+        self.segment_bytes = (SAMPLE_RATE as f32 * BYTES_PER_SAMPLE as f32 * CHANNELS as f32 * seconds) as usize;
         self
     }
 }
@@ -92,7 +96,7 @@ impl AsrProvider for OpenAiCompatibleAsrProvider {
                             })).await;
                         }
                         Err(e) => {
-                            tracing::warn!("segment transcription failed: {}", e);
+                            let _ = tx.send(Err(anyhow::anyhow!("segment transcription failed: {}", e))).await;
                         }
                     }
                 }
@@ -169,10 +173,12 @@ async fn transcribe_segment(
     Ok(result.text.trim().to_string())
 }
 
-/// Wrap raw PCM (16kHz, 16-bit, mono) in a WAV header.
+/// Wrap raw PCM in a WAV header. Format determined by constants above.
 fn pcm_to_wav(pcm: &[u8]) -> Vec<u8> {
     let data_len = pcm.len() as u32;
     let file_len = 36 + data_len;
+    let byte_rate = SAMPLE_RATE * CHANNELS as u32 * BYTES_PER_SAMPLE as u32;
+    let block_align = CHANNELS * BYTES_PER_SAMPLE;
 
     let mut wav = Vec::with_capacity(44 + pcm.len());
     // RIFF header
@@ -181,13 +187,13 @@ fn pcm_to_wav(pcm: &[u8]) -> Vec<u8> {
     wav.extend_from_slice(b"WAVE");
     // fmt chunk
     wav.extend_from_slice(b"fmt ");
-    wav.extend_from_slice(&16u32.to_le_bytes());   // chunk size
-    wav.extend_from_slice(&1u16.to_le_bytes());    // PCM format
-    wav.extend_from_slice(&1u16.to_le_bytes());    // mono
-    wav.extend_from_slice(&16000u32.to_le_bytes()); // sample rate
-    wav.extend_from_slice(&32000u32.to_le_bytes()); // byte rate (16000 * 2)
-    wav.extend_from_slice(&2u16.to_le_bytes());    // block align
-    wav.extend_from_slice(&16u16.to_le_bytes());   // bits per sample
+    wav.extend_from_slice(&16u32.to_le_bytes());        // chunk size
+    wav.extend_from_slice(&1u16.to_le_bytes());         // PCM format
+    wav.extend_from_slice(&CHANNELS.to_le_bytes());
+    wav.extend_from_slice(&SAMPLE_RATE.to_le_bytes());
+    wav.extend_from_slice(&byte_rate.to_le_bytes());
+    wav.extend_from_slice(&block_align.to_le_bytes());
+    wav.extend_from_slice(&BITS_PER_SAMPLE.to_le_bytes());
     // data chunk
     wav.extend_from_slice(b"data");
     wav.extend_from_slice(&data_len.to_le_bytes());
