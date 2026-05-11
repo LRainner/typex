@@ -3,6 +3,8 @@ use futures::StreamExt;
 use std::sync::Arc;
 
 use typex_asr::mock::MockAsrProvider;
+use typex_asr::openai_compat::OpenAiCompatibleAsrProvider;
+use typex_asr::AsrProvider;
 use typex_config::AppConfig;
 use typex_injector::clipboard::ClipboardInjector;
 use typex_plugin::{filler_remover::FillerRemover, sentence_formatter::SentenceFormatter, text_cleaner::TextCleaner};
@@ -17,7 +19,7 @@ async fn main() -> Result<()> {
 
     let config = load_config()?;
 
-    let asr = Arc::new(MockAsrProvider::new());
+    let asr = create_asr_provider(&config)?;
 
     let mut builder = TypeX::builder(asr);
 
@@ -62,6 +64,33 @@ async fn main() -> Result<()> {
 
     println!("\n=== Pipeline Complete ===");
     Ok(())
+}
+
+fn create_asr_provider(config: &AppConfig) -> Result<Arc<dyn AsrProvider>> {
+    match config.asr.provider.as_str() {
+        "mock" => Ok(Arc::new(MockAsrProvider::new())),
+        "openai-compatible" => {
+            let endpoint = config.asr.endpoint.as_deref().unwrap_or("https://api.groq.com/openai/v1");
+            let api_key = config.asr.api_key.clone()
+                .or_else(|| std::env::var("GROQ_API_KEY").ok())
+                .or_else(|| std::env::var("OPENAI_API_KEY").ok())
+                .ok_or_else(|| anyhow::anyhow!("ASR api_key not set (config or GROQ_API_KEY/OPENAI_API_KEY env)"))?;
+            let model = config.asr.model.as_deref().unwrap_or("whisper-large-v3");
+
+            let mut provider = OpenAiCompatibleAsrProvider::new(
+                endpoint.to_string(),
+                api_key,
+                model.to_string(),
+            );
+
+            if let Some(lang) = &config.asr.language {
+                provider = provider.with_language(lang.clone());
+            }
+
+            Ok(Arc::new(provider))
+        }
+        other => Err(anyhow::anyhow!("unknown ASR provider: {}", other)),
+    }
 }
 
 fn load_config() -> Result<AppConfig> {

@@ -23,3 +23,4 @@ pub trait AsrProvider: Send + Sync {
 }
 
 pub mod mock;
+pub mod openai_compat;

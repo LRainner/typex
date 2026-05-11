@@ -1,13 +1,17 @@
 # TypeX Configuration
 
 [asr]
-provider = "mock"         # mock | whisper-local | openai-compatible
-# endpoint = "http://localhost:8080/v1/asr"
+provider = "mock"         # mock | openai-compatible
+# For Groq (free):
+# provider = "openai-compatible"
+# endpoint = "https://api.groq.com/openai/v1"
 # model = "whisper-large-v3"
+# api_key = "gsk_..."     # or set GROQ_API_KEY env var
+# language = "zh"
 
 [llm]
 enabled = false            # set true to enable text optimization
-provider = "mock"          # mock | llama-local | openai-compatible
+provider = "mock"          # mock | openai-compatible
 # endpoint = "http://localhost:8080/v1/chat/completions"
 # model = "gpt-4o-mini"
 # api_key = "sk-..."
