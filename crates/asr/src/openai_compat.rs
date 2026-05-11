@@ -72,50 +72,40 @@ impl AsrProvider for OpenAiCompatibleAsrProvider {
         tokio::spawn(async move {
             let mut buffer: Vec<u8> = Vec::new();
             let mut audio = Box::pin(audio);
-            let mut stop = false;
+            let mut ok = true;
 
-            while !stop && let Some(chunk) = audio.next().await {
+            while ok && let Some(chunk) = audio.next().await {
                 let data = match chunk {
                     Ok(d) => d,
                     Err(e) => {
-                        let _ = tx.send(Err(anyhow::anyhow!("audio read error: {}", e))).await;
+                        let _ = tx.send(Err(e.context("audio read error"))).await;
                         break;
                     }
                 };
 
                 buffer.extend_from_slice(&data);
 
-                // Send segment when buffer is full
                 while buffer.len() >= segment_bytes {
                     let segment: Vec<u8> = buffer.drain(..segment_bytes).collect();
                     match transcribe_segment(&client, &endpoint, &api_key, &model, &language, &segment).await {
                         Ok(text) => {
-                            let _ = tx.send(Ok(AsrResult {
+                            if tx.send(Ok(AsrResult {
                                 text,
                                 is_final: false,
                                 confidence: 1.0,
-                            })).await;
+                            })).await.is_err() {
+                                return;
+                            }
                         }
                         Err(e) => {
-                            let _ = tx.send(Err(anyhow::anyhow!("segment transcription failed: {}", e))).await;
-                            // Stop on persistent client errors (4xx) to avoid error flood
-                            if let Some(req_err) = e.downcast_ref::<reqwest::Error>() {
-                                if let Some(status) = req_err.status() {
-                                    if status.is_client_error() {
-                                        stop = true;
-                                        break;
-                                    }
-                                }
-                            }
+                            let _ = tx.send(Err(e.context("segment transcription failed"))).await;
+                            ok = false;
                         }
                     }
                 }
             }
 
-            // Post-loop: handle remaining buffer or signal completion
-            if stop {
-                // Aborted due to 4xx error — already sent Err, nothing more to do
-            } else if !buffer.is_empty() {
+            if ok && !buffer.is_empty() {
                 match transcribe_segment(&client, &endpoint, &api_key, &model, &language, &buffer).await {
                     Ok(text) => {
                         let _ = tx.send(Ok(AsrResult {
@@ -125,11 +115,10 @@ impl AsrProvider for OpenAiCompatibleAsrProvider {
                         })).await;
                     }
                     Err(e) => {
-                        let _ = tx.send(Err(anyhow::anyhow!("final segment failed: {}", e))).await;
+                        let _ = tx.send(Err(e.context("final segment failed"))).await;
                     }
                 }
-            } else {
-                // Normal completion with no remaining audio
+            } else if ok {
                 let _ = tx.send(Ok(AsrResult {
                     text: String::new(),
                     is_final: true,
@@ -175,8 +164,8 @@ async fn transcribe_segment(
         .send()
         .await?;
 
-    if !resp.status().is_success() {
-        let status = resp.status();
+    let status = resp.status();
+    if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
         anyhow::bail!("API error {}: {}", status, body);
     }
