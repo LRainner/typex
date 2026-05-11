@@ -48,7 +48,7 @@ impl OpenAiCompatibleAsrProvider {
     }
 
     pub fn with_segment_duration(mut self, seconds: f32) -> Self {
-        self.segment_bytes = (SAMPLE_RATE as f32 * BYTES_PER_SAMPLE as f32 * CHANNELS as f32 * seconds) as usize;
+        self.segment_bytes = (SAMPLE_RATE as f32 * BYTES_PER_SAMPLE as f32 * CHANNELS as f32 * seconds.max(0.1)) as usize;
         self
     }
 }
@@ -112,8 +112,10 @@ impl AsrProvider for OpenAiCompatibleAsrProvider {
                 }
             }
 
-            // Send remaining audio as final segment
-            if !buffer.is_empty() {
+            // Post-loop: handle remaining buffer or signal completion
+            if stop {
+                // Aborted due to 4xx error — already sent Err, nothing more to do
+            } else if !buffer.is_empty() {
                 match transcribe_segment(&client, &endpoint, &api_key, &model, &language, &buffer).await {
                     Ok(text) => {
                         let _ = tx.send(Ok(AsrResult {
@@ -127,7 +129,7 @@ impl AsrProvider for OpenAiCompatibleAsrProvider {
                     }
                 }
             } else {
-                // Signal completion even if no remaining audio
+                // Normal completion with no remaining audio
                 let _ = tx.send(Ok(AsrResult {
                     text: String::new(),
                     is_final: true,
