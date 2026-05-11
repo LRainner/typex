@@ -12,7 +12,8 @@ cargo build
 cargo run -p typex-cli
 
 # Customize config
-cp config.toml ~/.typex/config.toml
+cp config.example.toml config.toml
+# Edit config.toml with your API keys
 ```
 
 ## Architecture
@@ -43,4 +44,4 @@ audio → ASR → text chunk → plugins → LLM (optional) → injector → tar
 
 1. Implement `Plugin` trait in `crates/plugin/src/`
 2. Add module to `crates/plugin/src/lib.rs`
-3. Add name to `typex.toml` plugins list
+3. Add name to `config.toml` plugins list

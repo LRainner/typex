@@ -23,6 +23,10 @@ pub struct AsrConfig {
     pub endpoint: Option<String>,
     #[serde(default)]
     pub model: Option<String>,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -80,6 +84,8 @@ fn default_asr() -> AsrConfig {
         provider: "mock".into(),
         endpoint: None,
         model: None,
+        api_key: None,
+        language: None,
     }
 }
 

@@ -13,6 +13,9 @@ Cargo.lock
 .DS_Store
 Thumbs.db
 
+# Config (contains API keys)
+config.toml
+
 # Env
 .env
 .env.*

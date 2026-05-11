@@ -1,0 +1,23 @@
+# TypeX Configuration
+
+[asr]
+provider = "mock"         # mock | openai-compatible
+# provider = "openai-compatible"
+# endpoint = "https://api.openai.com/v1"
+# model = "whisper-1"
+# api_key = "sk-..."     # or set OPENAI_API_KEY env var
+# language = "zh"
+
+[llm]
+enabled = false            # set true to enable text optimization
+provider = "mock"          # mock | openai-compatible
+# endpoint = "https://api.openai.com/v1"
+# model = "gpt-4o-mini"
+# api_key = "sk-..."
+
+[pipeline]
+performance = "balanced"   # low | balanced | high
+plugins = ["filler_remover", "text_cleaner"]
+
+[injector]
+method = "clipboard"       # clipboard | platform
