@@ -11,7 +11,7 @@ const BITS_PER_SAMPLE: u16 = 16;
 const CHANNELS: u16 = 1;
 const BYTES_PER_SAMPLE: u16 = BITS_PER_SAMPLE / 8; // 2 bytes per sample
 
-/// OpenAI-compatible ASR provider (works with OpenAI, Groq, etc.).
+/// OpenAI-compatible ASR provider (works with OpenAI, etc.).
 ///
 /// Strategy: buffer incoming PCM audio into fixed-duration segments,
 /// encode as WAV, POST to `/v1/audio/transcriptions`, yield text.
@@ -72,8 +72,9 @@ impl AsrProvider for OpenAiCompatibleAsrProvider {
         tokio::spawn(async move {
             let mut buffer: Vec<u8> = Vec::new();
             let mut audio = Box::pin(audio);
+            let mut stop = false;
 
-            while let Some(chunk) = audio.next().await {
+            while !stop && let Some(chunk) = audio.next().await {
                 let data = match chunk {
                     Ok(d) => d,
                     Err(e) => {
@@ -97,6 +98,15 @@ impl AsrProvider for OpenAiCompatibleAsrProvider {
                         }
                         Err(e) => {
                             let _ = tx.send(Err(anyhow::anyhow!("segment transcription failed: {}", e))).await;
+                            // Stop on persistent client errors (4xx) to avoid error flood
+                            if let Some(req_err) = e.downcast_ref::<reqwest::Error>() {
+                                if let Some(status) = req_err.status() {
+                                    if status.is_client_error() {
+                                        stop = true;
+                                        break;
+                                    }
+                                }
+                            }
                         }
                     }
                 }

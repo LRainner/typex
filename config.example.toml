@@ -2,17 +2,16 @@
 
 [asr]
 provider = "mock"         # mock | openai-compatible
-# For Groq (free):
 # provider = "openai-compatible"
-# endpoint = "https://api.groq.com/openai/v1"
-# model = "whisper-large-v3"
-# api_key = "gsk_..."     # or set GROQ_API_KEY env var
+# endpoint = "https://api.openai.com/v1"
+# model = "whisper-1"
+# api_key = "sk-..."     # or set OPENAI_API_KEY env var
 # language = "zh"
 
 [llm]
 enabled = false            # set true to enable text optimization
 provider = "mock"          # mock | openai-compatible
-# endpoint = "http://localhost:8080/v1/chat/completions"
+# endpoint = "https://api.openai.com/v1"
 # model = "gpt-4o-mini"
 # api_key = "sk-..."
 

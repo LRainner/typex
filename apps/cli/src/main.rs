@@ -70,12 +70,11 @@ fn create_asr_provider(config: &AppConfig) -> Result<Arc<dyn AsrProvider>> {
     match config.asr.provider.as_str() {
         "mock" => Ok(Arc::new(MockAsrProvider::new())),
         "openai-compatible" => {
-            let endpoint = config.asr.endpoint.as_deref().unwrap_or("https://api.groq.com/openai/v1");
+            let endpoint = config.asr.endpoint.as_deref().unwrap_or("https://api.openai.com/v1");
             let api_key = config.asr.api_key.clone()
-                .or_else(|| std::env::var("GROQ_API_KEY").ok())
                 .or_else(|| std::env::var("OPENAI_API_KEY").ok())
-                .ok_or_else(|| anyhow::anyhow!("ASR api_key not set (config or GROQ_API_KEY/OPENAI_API_KEY env)"))?;
-            let model = config.asr.model.as_deref().unwrap_or("whisper-large-v3");
+                .ok_or_else(|| anyhow::anyhow!("ASR api_key not set (config or OPENAI_API_KEY env)"))?;
+            let model = config.asr.model.as_deref().unwrap_or("whisper-1");
 
             let mut provider = OpenAiCompatibleAsrProvider::new(
                 endpoint.to_string(),
