@@ -1,5 +1,5 @@
 use anyhow::Result;
-use futures::StreamExt;
+use futures::stream::{BoxStream, StreamExt};
 use std::sync::Arc;
 
 use typex_asr::mock::MockAsrProvider;
@@ -18,6 +18,7 @@ async fn main() -> Result<()> {
         .init();
 
     let config = load_config()?;
+    let input_file = parse_input_arg();
 
     let asr = create_asr_provider(&config)?;
 
@@ -39,10 +40,9 @@ async fn main() -> Result<()> {
 
     let typex = builder.build();
 
-    // Empty audio stream — mock ASR ignores it and produces its own chunks
-    let audio = futures::stream::empty::<Result<bytes::Bytes>>().boxed();
+    let audio = create_audio_stream(&config, input_file.as_deref())?;
 
-    println!("=== TypeX Pipeline Demo ===\n");
+    println!("=== TypeX Pipeline ===\n");
 
     let mut stream = typex.pipeline().run(audio);
 
@@ -64,6 +64,56 @@ async fn main() -> Result<()> {
 
     println!("\n=== Pipeline Complete ===");
     Ok(())
+}
+
+fn create_audio_stream(config: &AppConfig, input_file: Option<&str>) -> Result<BoxStream<'static, Result<bytes::Bytes>>> {
+    match config.asr.provider.as_str() {
+        "mock" => {
+            // Mock provider generates its own data, empty stream is fine
+            Ok(futures::stream::empty::<Result<bytes::Bytes>>().boxed())
+        }
+        "openai-compatible" => {
+            let path = input_file.ok_or_else(|| anyhow::anyhow!("--input <file> required for openai-compatible provider"))?;
+            let data = read_wav_pcm(path)?;
+            tracing::info!("loaded {} bytes of PCM from {}", data.len(), path);
+            let stream = pcm_chunk_stream(data, 8192);
+            Ok(stream.boxed())
+        }
+        other => Err(anyhow::anyhow!("unknown ASR provider: {}", other)),
+    }
+}
+
+/// Read a WAV file and return raw PCM data (skipping the 44-byte header).
+fn read_wav_pcm(path: &str) -> Result<Vec<u8>> {
+    let file = std::fs::read(path)?;
+    if file.len() < 44 {
+        anyhow::bail!("WAV file too small: {} bytes", file.len());
+    }
+    if &file[0..4] != b"RIFF" || &file[8..12] != b"WAVE" {
+        anyhow::bail!("not a valid WAV file: {}", path);
+    }
+    // Skip the 44-byte WAV header — assumes 16kHz 16-bit mono
+    Ok(file[44..].to_vec())
+}
+
+/// Convert a PCM byte vector into a chunked stream of Bytes.
+fn pcm_chunk_stream(data: Vec<u8>, chunk_size: usize) -> BoxStream<'static, Result<bytes::Bytes>> {
+    let chunks: Vec<Result<bytes::Bytes>> = data
+        .chunks(chunk_size)
+        .map(|c| Ok(bytes::Bytes::copy_from_slice(c)))
+        .collect();
+    futures::stream::iter(chunks).boxed()
+}
+
+/// Parse --input <file> from command line args.
+fn parse_input_arg() -> Option<String> {
+    let args: Vec<String> = std::env::args().collect();
+    for i in 0..args.len() {
+        if args[i] == "--input" && i + 1 < args.len() {
+            return Some(args[i + 1].clone());
+        }
+    }
+    None
 }
 
 fn create_asr_provider(config: &AppConfig) -> Result<Arc<dyn AsrProvider>> {
