@@ -83,26 +83,39 @@ fn create_audio_stream(config: &AppConfig, input_file: Option<&str>) -> Result<B
     }
 }
 
-/// Read a WAV file and return raw PCM data (skipping the 44-byte header).
+/// Read a WAV file and return raw PCM data (16-bit little-endian).
+/// Validates format is 16kHz, 16-bit, mono PCM as required by the ASR provider.
 fn read_wav_pcm(path: &str) -> Result<Vec<u8>> {
-    let file = std::fs::read(path)?;
-    if file.len() < 44 {
-        anyhow::bail!("WAV file too small: {} bytes", file.len());
+    let mut reader = hound::WavReader::open(path)?;
+    let spec = reader.spec();
+
+    if spec.channels != 1 {
+        anyhow::bail!("WAV must be mono, got {} channels", spec.channels);
     }
-    if &file[0..4] != b"RIFF" || &file[8..12] != b"WAVE" {
-        anyhow::bail!("not a valid WAV file: {}", path);
+    if spec.sample_rate != 16000 {
+        anyhow::bail!("WAV sample rate must be 16000, got {}", spec.sample_rate);
     }
-    // Skip the 44-byte WAV header — assumes 16kHz 16-bit mono
-    Ok(file[44..].to_vec())
+    if spec.bits_per_sample != 16 || spec.sample_format != hound::SampleFormat::Int {
+        anyhow::bail!("WAV must be 16-bit PCM, got {}-bit {:?}", spec.bits_per_sample, spec.sample_format);
+    }
+
+    let samples: Vec<i16> = reader.samples().collect::<Result<_, _>>()?;
+    let mut pcm = Vec::with_capacity(samples.len() * 2);
+    for s in &samples {
+        pcm.extend_from_slice(&s.to_le_bytes());
+    }
+    Ok(pcm)
 }
 
-/// Convert a PCM byte vector into a chunked stream of Bytes.
+/// Convert raw PCM data into a chunked stream using zero-copy slicing.
 fn pcm_chunk_stream(data: Vec<u8>, chunk_size: usize) -> BoxStream<'static, Result<bytes::Bytes>> {
-    let chunks: Vec<Result<bytes::Bytes>> = data
-        .chunks(chunk_size)
-        .map(|c| Ok(bytes::Bytes::copy_from_slice(c)))
-        .collect();
-    futures::stream::iter(chunks).boxed()
+    let data = bytes::Bytes::from(data);
+    let len = data.len();
+    let stream = (0..len).step_by(chunk_size).map(move |i| {
+        let end = (i + chunk_size).min(len);
+        Ok(data.slice(i..end))
+    });
+    futures::stream::iter(stream).boxed()
 }
 
 /// Parse --input <file> from command line args.

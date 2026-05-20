@@ -174,31 +174,24 @@ async fn transcribe_segment(
     Ok(result.text.trim().to_string())
 }
 
-/// Wrap raw PCM in a WAV header. Format determined by constants above.
+/// Wrap raw PCM in a WAV header using hound.
 fn pcm_to_wav(pcm: &[u8]) -> Vec<u8> {
-    let data_len = pcm.len() as u32;
-    let file_len = 36 + data_len;
-    let byte_rate = SAMPLE_RATE * CHANNELS as u32 * BYTES_PER_SAMPLE as u32;
-    let block_align = CHANNELS * BYTES_PER_SAMPLE;
+    use std::io::Cursor;
 
-    let mut wav = Vec::with_capacity(44 + pcm.len());
-    // RIFF header
-    wav.extend_from_slice(b"RIFF");
-    wav.extend_from_slice(&file_len.to_le_bytes());
-    wav.extend_from_slice(b"WAVE");
-    // fmt chunk
-    wav.extend_from_slice(b"fmt ");
-    wav.extend_from_slice(&16u32.to_le_bytes());        // chunk size
-    wav.extend_from_slice(&1u16.to_le_bytes());         // PCM format
-    wav.extend_from_slice(&CHANNELS.to_le_bytes());
-    wav.extend_from_slice(&SAMPLE_RATE.to_le_bytes());
-    wav.extend_from_slice(&byte_rate.to_le_bytes());
-    wav.extend_from_slice(&block_align.to_le_bytes());
-    wav.extend_from_slice(&BITS_PER_SAMPLE.to_le_bytes());
-    // data chunk
-    wav.extend_from_slice(b"data");
-    wav.extend_from_slice(&data_len.to_le_bytes());
-    wav.extend_from_slice(pcm);
-
-    wav
+    let spec = hound::WavSpec {
+        channels: CHANNELS,
+        sample_rate: SAMPLE_RATE,
+        bits_per_sample: BITS_PER_SAMPLE,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut writer = hound::WavWriter::new(&mut cursor, spec).unwrap();
+        let samples = pcm.chunks(2).map(|c| i16::from_le_bytes([c[0], c[1]]));
+        for sample in samples {
+            writer.write_sample(sample).unwrap();
+        }
+        writer.finalize().unwrap();
+    }
+    cursor.into_inner()
 }
