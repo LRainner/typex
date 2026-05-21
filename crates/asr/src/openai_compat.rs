@@ -51,6 +51,33 @@ impl OpenAiCompatibleAsrProvider {
         self.segment_bytes = (SAMPLE_RATE as f32 * BYTES_PER_SAMPLE as f32 * CHANNELS as f32 * seconds.max(0.1)) as usize;
         self
     }
+
+    /// Transcribe a complete audio file (any format the API supports: wav, mp3, ogg, etc.).
+    /// Sends the file as-is — no format conversion needed.
+    pub async fn transcribe_file(&self, file_data: Vec<u8>, filename: &str) -> Result<AsrResult> {
+        let url = transcription_url(&self.endpoint);
+        let mime = guess_mime(filename);
+        let mut form = reqwest::multipart::Form::new()
+            .text("model", self.model.clone())
+            .text("response_format", "json".to_string())
+            .part(
+                "file",
+                reqwest::multipart::Part::bytes(file_data)
+                    .file_name(filename.to_string())
+                    .mime_str(mime)?,
+            );
+
+        if let Some(lang) = &self.language {
+            form = form.text("language", lang.clone());
+        }
+
+        let text = post_transcription(&self.client, &url, &self.api_key, form).await?;
+        Ok(AsrResult {
+            text,
+            is_final: true,
+            confidence: 1.0,
+        })
+    }
 }
 
 #[async_trait]
@@ -139,9 +166,8 @@ async fn transcribe_segment(
     language: &Option<String>,
     pcm_data: &[u8],
 ) -> Result<String> {
-    let wav = pcm_to_wav(pcm_data);
-
-    let url = format!("{}/audio/transcriptions", endpoint.trim_end_matches('/'));
+    let wav = pcm_to_wav(pcm_data)?;
+    let url = transcription_url(endpoint);
 
     let mut form = reqwest::multipart::Form::new()
         .text("model", model.to_string())
@@ -157,8 +183,21 @@ async fn transcribe_segment(
         form = form.text("language", lang.clone());
     }
 
+    post_transcription(client, &url, api_key, form).await
+}
+
+fn transcription_url(endpoint: &str) -> String {
+    format!("{}/audio/transcriptions", endpoint.trim_end_matches('/'))
+}
+
+async fn post_transcription(
+    client: &reqwest::Client,
+    url: &str,
+    api_key: &str,
+    form: reqwest::multipart::Form,
+) -> Result<String> {
     let resp = client
-        .post(&url)
+        .post(url)
         .header("Authorization", format!("Bearer {}", api_key))
         .multipart(form)
         .send()
@@ -174,31 +213,40 @@ async fn transcribe_segment(
     Ok(result.text.trim().to_string())
 }
 
-/// Wrap raw PCM in a WAV header. Format determined by constants above.
-fn pcm_to_wav(pcm: &[u8]) -> Vec<u8> {
-    let data_len = pcm.len() as u32;
-    let file_len = 36 + data_len;
-    let byte_rate = SAMPLE_RATE * CHANNELS as u32 * BYTES_PER_SAMPLE as u32;
-    let block_align = CHANNELS * BYTES_PER_SAMPLE;
+/// Wrap raw PCM in a WAV header using hound.
+fn pcm_to_wav(pcm: &[u8]) -> Result<Vec<u8>> {
+    use std::io::Cursor;
 
-    let mut wav = Vec::with_capacity(44 + pcm.len());
-    // RIFF header
-    wav.extend_from_slice(b"RIFF");
-    wav.extend_from_slice(&file_len.to_le_bytes());
-    wav.extend_from_slice(b"WAVE");
-    // fmt chunk
-    wav.extend_from_slice(b"fmt ");
-    wav.extend_from_slice(&16u32.to_le_bytes());        // chunk size
-    wav.extend_from_slice(&1u16.to_le_bytes());         // PCM format
-    wav.extend_from_slice(&CHANNELS.to_le_bytes());
-    wav.extend_from_slice(&SAMPLE_RATE.to_le_bytes());
-    wav.extend_from_slice(&byte_rate.to_le_bytes());
-    wav.extend_from_slice(&block_align.to_le_bytes());
-    wav.extend_from_slice(&BITS_PER_SAMPLE.to_le_bytes());
-    // data chunk
-    wav.extend_from_slice(b"data");
-    wav.extend_from_slice(&data_len.to_le_bytes());
-    wav.extend_from_slice(pcm);
+    let spec = hound::WavSpec {
+        channels: CHANNELS,
+        sample_rate: SAMPLE_RATE,
+        bits_per_sample: BITS_PER_SAMPLE,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut writer = hound::WavWriter::new(&mut cursor, spec)
+            .map_err(|e| anyhow::anyhow!("wav writer init failed: {}", e))?;
+        if pcm.len() % 2 != 0 {
+            tracing::warn!("odd-length PCM data ({} bytes), dropping last byte", pcm.len());
+        }
+        for chunk in pcm.chunks_exact(2) {
+            writer.write_sample(i16::from_le_bytes([chunk[0], chunk[1]]))
+                .map_err(|e| anyhow::anyhow!("wav write sample failed: {}", e))?;
+        }
+        writer.finalize()
+            .map_err(|e| anyhow::anyhow!("wav finalize failed: {}", e))?;
+    }
+    Ok(cursor.into_inner())
+}
 
-    wav
+fn guess_mime(filename: &str) -> &'static str {
+    match filename.rsplit('.').next().map(|s| s.to_lowercase()).as_deref() {
+        Some("mp3") => "audio/mpeg",
+        Some("ogg") => "audio/ogg",
+        Some("flac") => "audio/flac",
+        Some("m4a") => "audio/mp4",
+        Some("webm") => "audio/webm",
+        _ => "audio/wav",
+    }
 }
