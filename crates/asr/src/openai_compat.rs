@@ -228,7 +228,7 @@ fn pcm_to_wav(pcm: &[u8]) -> Vec<u8> {
     let mut cursor = Cursor::new(Vec::new());
     {
         let mut writer = hound::WavWriter::new(&mut cursor, spec).unwrap();
-        let samples = pcm.chunks(2).map(|c| i16::from_le_bytes([c[0], c[1]]));
+        let samples = pcm.chunks_exact(2).map(|c| i16::from_le_bytes([c[0], c[1]]));
         for sample in samples {
             writer.write_sample(sample).unwrap();
         }
@@ -238,7 +238,7 @@ fn pcm_to_wav(pcm: &[u8]) -> Vec<u8> {
 }
 
 fn guess_mime(filename: &str) -> &'static str {
-    match filename.rsplit('.').next() {
+    match filename.rsplit('.').next().map(|s| s.to_lowercase()).as_deref() {
         Some("mp3") => "audio/mpeg",
         Some("ogg") => "audio/ogg",
         Some("flac") => "audio/flac",

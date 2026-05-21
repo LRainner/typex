@@ -26,8 +26,8 @@ async fn main() -> Result<()> {
         let file_data = std::fs::read(path)?;
         let filename = std::path::Path::new(path)
             .file_name()
-            .unwrap_or_default()
-            .to_str()
+            .and_then(|n| n.to_str())
+            .filter(|s| !s.is_empty())
             .unwrap_or("audio.wav");
 
         tracing::info!("transcribing {} ({} bytes)", filename, file_data.len());
@@ -50,15 +50,11 @@ async fn main() -> Result<()> {
 
         let mut builder = TypeX::builder(asr);
         for name in &config.pipeline.plugins {
-            builder = match name.as_str() {
-                "filler_remover" => builder.plugin(Arc::new(FillerRemover)),
-                "sentence_formatter" => builder.plugin(Arc::new(SentenceFormatter)),
-                "text_cleaner" => builder.plugin(Arc::new(TextCleaner)),
-                other => {
-                    tracing::warn!("unknown plugin: {}", other);
-                    builder
-                }
-            };
+            if let Some(plugin) = create_plugin(name) {
+                builder = builder.plugin(plugin);
+            } else {
+                tracing::warn!("unknown plugin: {}", name);
+            }
         }
         builder = builder.injector(Arc::new(ClipboardInjector));
         let typex = builder.build();
@@ -87,17 +83,22 @@ async fn apply_plugins(text: &str, config: &AppConfig) -> String {
     let ctx = typex_plugin::PluginContext { is_final: true };
     let mut result = text.to_string();
     for name in &config.pipeline.plugins {
-        let plugin: Arc<dyn typex_plugin::Plugin> = match name.as_str() {
-            "filler_remover" => Arc::new(FillerRemover),
-            "sentence_formatter" => Arc::new(SentenceFormatter),
-            "text_cleaner" => Arc::new(TextCleaner),
-            _ => continue,
-        };
-        if let Ok(processed) = plugin.process(&result, &ctx).await {
-            result = processed;
+        if let Some(plugin) = create_plugin(name) {
+            if let Ok(processed) = plugin.process(&result, &ctx).await {
+                result = processed;
+            }
         }
     }
     result
+}
+
+fn create_plugin(name: &str) -> Option<Arc<dyn typex_plugin::Plugin>> {
+    match name {
+        "filler_remover" => Some(Arc::new(FillerRemover)),
+        "sentence_formatter" => Some(Arc::new(SentenceFormatter)),
+        "text_cleaner" => Some(Arc::new(TextCleaner)),
+        _ => None,
+    }
 }
 
 fn create_openai_provider(config: &AppConfig) -> Result<Arc<OpenAiCompatibleAsrProvider>> {
