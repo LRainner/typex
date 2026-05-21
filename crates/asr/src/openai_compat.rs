@@ -55,8 +55,7 @@ impl OpenAiCompatibleAsrProvider {
     /// Transcribe a complete audio file (any format the API supports: wav, mp3, ogg, etc.).
     /// Sends the file as-is — no format conversion needed.
     pub async fn transcribe_file(&self, file_data: Vec<u8>, filename: &str) -> Result<AsrResult> {
-        let url = format!("{}/audio/transcriptions", self.endpoint.trim_end_matches('/'));
-
+        let url = transcription_url(&self.endpoint);
         let mime = guess_mime(filename);
         let mut form = reqwest::multipart::Form::new()
             .text("model", self.model.clone())
@@ -72,22 +71,9 @@ impl OpenAiCompatibleAsrProvider {
             form = form.text("language", lang.clone());
         }
 
-        let resp = self.client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .multipart(form)
-            .send()
-            .await?;
-
-        let status = resp.status();
-        if !status.is_success() {
-            let body = resp.text().await.unwrap_or_default();
-            anyhow::bail!("API error {}: {}", status, body);
-        }
-
-        let result: TranscriptionResponse = resp.json().await?;
+        let text = post_transcription(&self.client, &url, &self.api_key, form).await?;
         Ok(AsrResult {
-            text: result.text.trim().to_string(),
+            text,
             is_final: true,
             confidence: 1.0,
         })
@@ -181,8 +167,7 @@ async fn transcribe_segment(
     pcm_data: &[u8],
 ) -> Result<String> {
     let wav = pcm_to_wav(pcm_data)?;
-
-    let url = format!("{}/audio/transcriptions", endpoint.trim_end_matches('/'));
+    let url = transcription_url(endpoint);
 
     let mut form = reqwest::multipart::Form::new()
         .text("model", model.to_string())
@@ -198,8 +183,21 @@ async fn transcribe_segment(
         form = form.text("language", lang.clone());
     }
 
+    post_transcription(client, &url, api_key, form).await
+}
+
+fn transcription_url(endpoint: &str) -> String {
+    format!("{}/audio/transcriptions", endpoint.trim_end_matches('/'))
+}
+
+async fn post_transcription(
+    client: &reqwest::Client,
+    url: &str,
+    api_key: &str,
+    form: reqwest::multipart::Form,
+) -> Result<String> {
     let resp = client
-        .post(&url)
+        .post(url)
         .header("Authorization", format!("Bearer {}", api_key))
         .multipart(form)
         .send()
