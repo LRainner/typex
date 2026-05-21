@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     #[serde(default = "default_asr")]
     pub asr: AsrConfig,
@@ -99,17 +99,6 @@ fn default_performance() -> PerformanceMode {
 
 fn default_injector() -> String {
     "clipboard".into()
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            asr: default_asr(),
-            llm: LlmConfig::default(),
-            pipeline: PipelineConfig::default(),
-            injector: InjectorConfig::default(),
-        }
-    }
 }
 
 impl Default for AsrConfig {

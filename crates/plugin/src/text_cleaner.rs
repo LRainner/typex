@@ -13,10 +13,7 @@ impl Plugin for TextCleaner {
     }
 
     async fn process(&self, text: &str, _ctx: &PluginContext) -> Result<String> {
-        let cleaned = text
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join("");
+        let cleaned = text.split_whitespace().collect::<Vec<_>>().join("");
         Ok(cleaned)
     }
 }

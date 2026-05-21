@@ -1,7 +1,6 @@
 use anyhow::Result;
 use futures::stream::{BoxStream, StreamExt};
 use std::sync::Arc;
-use tracing;
 
 use typex_asr::{AsrProvider, AsrResult};
 use typex_injector::Injector;
@@ -70,10 +69,10 @@ impl Pipeline {
                 let text = apply_plugins(&asr_result.text, &asr_result, &plugins).await?;
 
                 // Inject into system if injector is set
-                if let Some(ref inj) = injector {
-                    if let Err(e) = inj.inject(&text) {
-                        tracing::warn!("injector failed: {}", e);
-                    }
+                if let Some(ref inj) = injector
+                    && let Err(e) = inj.inject(&text)
+                {
+                    tracing::warn!("injector failed: {}", e);
                 }
 
                 Ok(PipelineOutput {
@@ -111,7 +110,7 @@ impl Pipeline {
 
         // Create LLM input stream from channel
         let llm_input = tokio_stream::wrappers::ReceiverStream::new(rx)
-            .map(|s| Ok(s))
+            .map(Ok)
             .boxed();
 
         let llm_output = llm.optimize(llm_input);

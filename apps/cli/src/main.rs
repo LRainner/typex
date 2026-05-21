@@ -2,12 +2,14 @@ use anyhow::Result;
 use futures::StreamExt;
 use std::sync::Arc;
 
+use typex_asr::AsrProvider;
 use typex_asr::mock::MockAsrProvider;
 use typex_asr::openai_compat::OpenAiCompatibleAsrProvider;
-use typex_asr::AsrProvider;
 use typex_config::AppConfig;
 use typex_injector::clipboard::ClipboardInjector;
-use typex_plugin::{filler_remover::FillerRemover, sentence_formatter::SentenceFormatter, text_cleaner::TextCleaner};
+use typex_plugin::{
+    filler_remover::FillerRemover, sentence_formatter::SentenceFormatter, text_cleaner::TextCleaner,
+};
 
 use typex_core::TypeX;
 
@@ -112,17 +114,21 @@ fn validate_file_provider(config: &AppConfig) -> Result<()> {
 }
 
 fn create_openai_provider(config: &AppConfig) -> Result<Arc<OpenAiCompatibleAsrProvider>> {
-    let endpoint = config.asr.endpoint.as_deref().unwrap_or("https://api.openai.com/v1");
-    let api_key = config.asr.api_key.clone()
+    let endpoint = config
+        .asr
+        .endpoint
+        .as_deref()
+        .unwrap_or("https://api.openai.com/v1");
+    let api_key = config
+        .asr
+        .api_key
+        .clone()
         .or_else(|| std::env::var("OPENAI_API_KEY").ok())
         .ok_or_else(|| anyhow::anyhow!("ASR api_key not set (config or OPENAI_API_KEY env)"))?;
     let model = config.asr.model.as_deref().unwrap_or("whisper-1");
 
-    let mut provider = OpenAiCompatibleAsrProvider::new(
-        endpoint.to_string(),
-        api_key,
-        model.to_string(),
-    );
+    let mut provider =
+        OpenAiCompatibleAsrProvider::new(endpoint.to_string(), api_key, model.to_string());
 
     if let Some(lang) = &config.asr.language {
         provider = provider.with_language(lang.clone());
@@ -135,7 +141,8 @@ fn parse_input_arg() -> Result<Option<String>> {
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         if arg == "--input" {
-            let path = args.next()
+            let path = args
+                .next()
                 .ok_or_else(|| anyhow::anyhow!("--input requires a file path"))?;
             return Ok(Some(path));
         }
