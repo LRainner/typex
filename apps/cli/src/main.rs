@@ -22,6 +22,7 @@ async fn main() -> Result<()> {
 
     if let Some(path) = &input_file {
         // File mode: send audio directly to API, then apply plugins
+        validate_file_provider(&config)?;
         let provider = create_openai_provider(&config)?;
         let file_data = std::fs::read(path)?;
         let filename = std::path::Path::new(path)
@@ -98,6 +99,14 @@ fn create_plugin(name: &str) -> Option<Arc<dyn typex_plugin::Plugin>> {
         "sentence_formatter" => Some(Arc::new(SentenceFormatter)),
         "text_cleaner" => Some(Arc::new(TextCleaner)),
         _ => None,
+    }
+}
+
+fn validate_file_provider(config: &AppConfig) -> Result<()> {
+    match config.asr.provider.as_str() {
+        "openai-compatible" | "" => Ok(()),
+        "mock" => anyhow::bail!("mock provider does not support file transcription"),
+        other => anyhow::bail!("unknown ASR provider: {}", other),
     }
 }
 

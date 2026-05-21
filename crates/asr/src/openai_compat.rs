@@ -180,7 +180,7 @@ async fn transcribe_segment(
     language: &Option<String>,
     pcm_data: &[u8],
 ) -> Result<String> {
-    let wav = pcm_to_wav(pcm_data);
+    let wav = pcm_to_wav(pcm_data)?;
 
     let url = format!("{}/audio/transcriptions", endpoint.trim_end_matches('/'));
 
@@ -216,7 +216,7 @@ async fn transcribe_segment(
 }
 
 /// Wrap raw PCM in a WAV header using hound.
-fn pcm_to_wav(pcm: &[u8]) -> Vec<u8> {
+fn pcm_to_wav(pcm: &[u8]) -> Result<Vec<u8>> {
     use std::io::Cursor;
 
     let spec = hound::WavSpec {
@@ -227,14 +227,16 @@ fn pcm_to_wav(pcm: &[u8]) -> Vec<u8> {
     };
     let mut cursor = Cursor::new(Vec::new());
     {
-        let mut writer = hound::WavWriter::new(&mut cursor, spec).unwrap();
-        let samples = pcm.chunks_exact(2).map(|c| i16::from_le_bytes([c[0], c[1]]));
-        for sample in samples {
-            writer.write_sample(sample).unwrap();
+        let mut writer = hound::WavWriter::new(&mut cursor, spec)
+            .map_err(|e| anyhow::anyhow!("wav writer init failed: {}", e))?;
+        for chunk in pcm.chunks_exact(2) {
+            writer.write_sample(i16::from_le_bytes([chunk[0], chunk[1]]))
+                .map_err(|e| anyhow::anyhow!("wav write sample failed: {}", e))?;
         }
-        writer.finalize().unwrap();
+        writer.finalize()
+            .map_err(|e| anyhow::anyhow!("wav finalize failed: {}", e))?;
     }
-    cursor.into_inner()
+    Ok(cursor.into_inner())
 }
 
 fn guess_mime(filename: &str) -> &'static str {
