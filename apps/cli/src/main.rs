@@ -24,7 +24,7 @@ async fn main() -> Result<()> {
         // File mode: send audio directly to API, then apply plugins
         validate_file_provider(&config)?;
         let provider = create_openai_provider(&config)?;
-        let file_data = std::fs::read(path)?;
+        let file_data = tokio::fs::read(path).await?;
         let filename = std::path::Path::new(path)
             .file_name()
             .and_then(|n| n.to_str())
@@ -45,7 +45,7 @@ async fn main() -> Result<()> {
         // Stream mode: pipeline with mock or microphone
         let asr: Arc<dyn AsrProvider> = match config.asr.provider.as_str() {
             "mock" => Arc::new(MockAsrProvider::new()),
-            "openai-compatible" => create_openai_provider(&config)?,
+            "openai-compatible" | "" => create_openai_provider(&config)?,
             other => anyhow::bail!("unknown ASR provider: {}", other),
         };
 
@@ -85,8 +85,9 @@ async fn apply_plugins(text: &str, config: &AppConfig) -> String {
     let mut result = text.to_string();
     for name in &config.pipeline.plugins {
         if let Some(plugin) = create_plugin(name) {
-            if let Ok(processed) = plugin.process(&result, &ctx).await {
-                result = processed;
+            match plugin.process(&result, &ctx).await {
+                Ok(processed) => result = processed,
+                Err(e) => tracing::warn!("plugin {} failed: {}", name, e),
             }
         }
     }
@@ -131,10 +132,10 @@ fn create_openai_provider(config: &AppConfig) -> Result<Arc<OpenAiCompatibleAsrP
 }
 
 fn parse_input_arg() -> Option<String> {
-    let args: Vec<String> = std::env::args().collect();
-    for i in 0..args.len() {
-        if args[i] == "--input" && i + 1 < args.len() {
-            return Some(args[i + 1].clone());
+    let mut args = std::env::args();
+    while let Some(arg) = args.next() {
+        if arg == "--input" {
+            return args.next();
         }
     }
     None

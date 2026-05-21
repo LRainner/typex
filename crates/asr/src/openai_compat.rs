@@ -229,6 +229,9 @@ fn pcm_to_wav(pcm: &[u8]) -> Result<Vec<u8>> {
     {
         let mut writer = hound::WavWriter::new(&mut cursor, spec)
             .map_err(|e| anyhow::anyhow!("wav writer init failed: {}", e))?;
+        if pcm.len() % 2 != 0 {
+            tracing::warn!("odd-length PCM data ({} bytes), dropping last byte", pcm.len());
+        }
         for chunk in pcm.chunks_exact(2) {
             writer.write_sample(i16::from_le_bytes([chunk[0], chunk[1]]))
                 .map_err(|e| anyhow::anyhow!("wav write sample failed: {}", e))?;
