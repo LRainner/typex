@@ -51,6 +51,47 @@ impl OpenAiCompatibleAsrProvider {
         self.segment_bytes = (SAMPLE_RATE as f32 * BYTES_PER_SAMPLE as f32 * CHANNELS as f32 * seconds.max(0.1)) as usize;
         self
     }
+
+    /// Transcribe a complete audio file (any format the API supports: wav, mp3, ogg, etc.).
+    /// Sends the file as-is — no format conversion needed.
+    pub async fn transcribe_file(&self, file_data: &[u8], filename: &str) -> Result<AsrResult> {
+        let url = format!("{}/audio/transcriptions", self.endpoint.trim_end_matches('/'));
+
+        let mime = guess_mime(filename);
+        let mut form = reqwest::multipart::Form::new()
+            .text("model", self.model.clone())
+            .text("response_format", "json".to_string())
+            .part(
+                "file",
+                reqwest::multipart::Part::bytes(file_data.to_vec())
+                    .file_name(filename.to_string())
+                    .mime_str(mime)?,
+            );
+
+        if let Some(lang) = &self.language {
+            form = form.text("language", lang.clone());
+        }
+
+        let resp = self.client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .multipart(form)
+            .send()
+            .await?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("API error {}: {}", status, body);
+        }
+
+        let result: TranscriptionResponse = resp.json().await?;
+        Ok(AsrResult {
+            text: result.text.trim().to_string(),
+            is_final: true,
+            confidence: 1.0,
+        })
+    }
 }
 
 #[async_trait]
@@ -194,4 +235,15 @@ fn pcm_to_wav(pcm: &[u8]) -> Vec<u8> {
         writer.finalize().unwrap();
     }
     cursor.into_inner()
+}
+
+fn guess_mime(filename: &str) -> &'static str {
+    match filename.rsplit('.').next() {
+        Some("mp3") => "audio/mpeg",
+        Some("ogg") => "audio/ogg",
+        Some("flac") => "audio/flac",
+        Some("m4a") => "audio/mp4",
+        Some("webm") => "audio/webm",
+        _ => "audio/wav",
+    }
 }

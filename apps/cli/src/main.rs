@@ -1,5 +1,5 @@
 use anyhow::Result;
-use futures::stream::{BoxStream, StreamExt};
+use futures::StreamExt;
 use std::sync::Arc;
 
 use typex_asr::mock::MockAsrProvider;
@@ -20,105 +20,106 @@ async fn main() -> Result<()> {
     let config = load_config()?;
     let input_file = parse_input_arg();
 
-    let asr = create_asr_provider(&config)?;
+    if let Some(path) = &input_file {
+        // File mode: send audio directly to API, then apply plugins
+        let provider = create_openai_provider(&config)?;
+        let file_data = std::fs::read(path)?;
+        let filename = std::path::Path::new(path)
+            .file_name()
+            .unwrap_or_default()
+            .to_str()
+            .unwrap_or("audio.wav");
 
-    let mut builder = TypeX::builder(asr);
+        tracing::info!("transcribing {} ({} bytes)", filename, file_data.len());
+        let result = provider.transcribe_file(&file_data, filename).await?;
 
-    for name in &config.pipeline.plugins {
-        builder = match name.as_str() {
-            "filler_remover" => builder.plugin(Arc::new(FillerRemover)),
-            "sentence_formatter" => builder.plugin(Arc::new(SentenceFormatter)),
-            "text_cleaner" => builder.plugin(Arc::new(TextCleaner)),
-            other => {
-                tracing::warn!("unknown plugin: {}", other);
-                builder
-            }
+        let text = apply_plugins(&result.text, &config).await;
+
+        if text.is_empty() {
+            println!("(no speech detected)");
+        } else {
+            println!("{}", text);
+        }
+    } else {
+        // Stream mode: pipeline with mock or microphone
+        let asr: Arc<dyn AsrProvider> = match config.asr.provider.as_str() {
+            "mock" => Arc::new(MockAsrProvider::new()),
+            "openai-compatible" => create_openai_provider(&config)?,
+            other => anyhow::bail!("unknown ASR provider: {}", other),
         };
-    }
 
-    builder = builder.injector(Arc::new(ClipboardInjector));
-
-    let typex = builder.build();
-
-    let audio = create_audio_stream(&config, input_file.as_deref())?;
-
-    println!("=== TypeX Pipeline ===\n");
-
-    let mut stream = typex.pipeline().run(audio);
-
-    while let Some(result) = stream.next().await {
-        match result {
-            Ok(output) => {
-                if output.is_final {
-                    println!("[FINAL] {}", output.text);
-                } else {
-                    println!("[partial] {}", output.text);
+        let mut builder = TypeX::builder(asr);
+        for name in &config.pipeline.plugins {
+            builder = match name.as_str() {
+                "filler_remover" => builder.plugin(Arc::new(FillerRemover)),
+                "sentence_formatter" => builder.plugin(Arc::new(SentenceFormatter)),
+                "text_cleaner" => builder.plugin(Arc::new(TextCleaner)),
+                other => {
+                    tracing::warn!("unknown plugin: {}", other);
+                    builder
                 }
-            }
-            Err(e) => {
-                tracing::error!("pipeline error: {}", e);
-                break;
+            };
+        }
+        builder = builder.injector(Arc::new(ClipboardInjector));
+        let typex = builder.build();
+
+        let audio = futures::stream::empty::<Result<bytes::Bytes>>().boxed();
+        let mut stream = typex.pipeline().run(audio);
+
+        while let Some(result) = stream.next().await {
+            match result {
+                Ok(output) => {
+                    let tag = if output.is_final { "FINAL" } else { "partial" };
+                    println!("[{}] {}", tag, output.text);
+                }
+                Err(e) => {
+                    tracing::error!("pipeline error: {}", e);
+                    break;
+                }
             }
         }
     }
 
-    println!("\n=== Pipeline Complete ===");
     Ok(())
 }
 
-fn create_audio_stream(config: &AppConfig, input_file: Option<&str>) -> Result<BoxStream<'static, Result<bytes::Bytes>>> {
-    match config.asr.provider.as_str() {
-        "mock" => {
-            // Mock provider generates its own data, empty stream is fine
-            Ok(futures::stream::empty::<Result<bytes::Bytes>>().boxed())
+async fn apply_plugins(text: &str, config: &AppConfig) -> String {
+    let ctx = typex_plugin::PluginContext { is_final: true };
+    let mut result = text.to_string();
+    for name in &config.pipeline.plugins {
+        let plugin: Arc<dyn typex_plugin::Plugin> = match name.as_str() {
+            "filler_remover" => Arc::new(FillerRemover),
+            "sentence_formatter" => Arc::new(SentenceFormatter),
+            "text_cleaner" => Arc::new(TextCleaner),
+            _ => continue,
+        };
+        if let Ok(processed) = plugin.process(&result, &ctx).await {
+            result = processed;
         }
-        "openai-compatible" => {
-            let path = input_file.ok_or_else(|| anyhow::anyhow!("--input <file> required for openai-compatible provider"))?;
-            let data = read_wav_pcm(path)?;
-            tracing::info!("loaded {} bytes of PCM from {}", data.len(), path);
-            let stream = pcm_chunk_stream(data, 8192);
-            Ok(stream.boxed())
-        }
-        other => Err(anyhow::anyhow!("unknown ASR provider: {}", other)),
     }
+    result
 }
 
-/// Read a WAV file and return raw PCM data (16-bit little-endian).
-/// Validates format is 16kHz, 16-bit, mono PCM as required by the ASR provider.
-fn read_wav_pcm(path: &str) -> Result<Vec<u8>> {
-    let mut reader = hound::WavReader::open(path)?;
-    let spec = reader.spec();
+fn create_openai_provider(config: &AppConfig) -> Result<Arc<OpenAiCompatibleAsrProvider>> {
+    let endpoint = config.asr.endpoint.as_deref().unwrap_or("https://api.openai.com/v1");
+    let api_key = config.asr.api_key.clone()
+        .or_else(|| std::env::var("OPENAI_API_KEY").ok())
+        .ok_or_else(|| anyhow::anyhow!("ASR api_key not set (config or OPENAI_API_KEY env)"))?;
+    let model = config.asr.model.as_deref().unwrap_or("whisper-1");
 
-    if spec.channels != 1 {
-        anyhow::bail!("WAV must be mono, got {} channels", spec.channels);
-    }
-    if spec.sample_rate != 16000 {
-        anyhow::bail!("WAV sample rate must be 16000, got {}", spec.sample_rate);
-    }
-    if spec.bits_per_sample != 16 || spec.sample_format != hound::SampleFormat::Int {
-        anyhow::bail!("WAV must be 16-bit PCM, got {}-bit {:?}", spec.bits_per_sample, spec.sample_format);
+    let mut provider = OpenAiCompatibleAsrProvider::new(
+        endpoint.to_string(),
+        api_key,
+        model.to_string(),
+    );
+
+    if let Some(lang) = &config.asr.language {
+        provider = provider.with_language(lang.clone());
     }
 
-    let samples: Vec<i16> = reader.samples().collect::<Result<_, _>>()?;
-    let mut pcm = Vec::with_capacity(samples.len() * 2);
-    for s in &samples {
-        pcm.extend_from_slice(&s.to_le_bytes());
-    }
-    Ok(pcm)
+    Ok(Arc::new(provider))
 }
 
-/// Convert raw PCM data into a chunked stream using zero-copy slicing.
-fn pcm_chunk_stream(data: Vec<u8>, chunk_size: usize) -> BoxStream<'static, Result<bytes::Bytes>> {
-    let data = bytes::Bytes::from(data);
-    let len = data.len();
-    let stream = (0..len).step_by(chunk_size).map(move |i| {
-        let end = (i + chunk_size).min(len);
-        Ok(data.slice(i..end))
-    });
-    futures::stream::iter(stream).boxed()
-}
-
-/// Parse --input <file> from command line args.
 fn parse_input_arg() -> Option<String> {
     let args: Vec<String> = std::env::args().collect();
     for i in 0..args.len() {
@@ -127,32 +128,6 @@ fn parse_input_arg() -> Option<String> {
         }
     }
     None
-}
-
-fn create_asr_provider(config: &AppConfig) -> Result<Arc<dyn AsrProvider>> {
-    match config.asr.provider.as_str() {
-        "mock" => Ok(Arc::new(MockAsrProvider::new())),
-        "openai-compatible" => {
-            let endpoint = config.asr.endpoint.as_deref().unwrap_or("https://api.openai.com/v1");
-            let api_key = config.asr.api_key.clone()
-                .or_else(|| std::env::var("OPENAI_API_KEY").ok())
-                .ok_or_else(|| anyhow::anyhow!("ASR api_key not set (config or OPENAI_API_KEY env)"))?;
-            let model = config.asr.model.as_deref().unwrap_or("whisper-1");
-
-            let mut provider = OpenAiCompatibleAsrProvider::new(
-                endpoint.to_string(),
-                api_key,
-                model.to_string(),
-            );
-
-            if let Some(lang) = &config.asr.language {
-                provider = provider.with_language(lang.clone());
-            }
-
-            Ok(Arc::new(provider))
-        }
-        other => Err(anyhow::anyhow!("unknown ASR provider: {}", other)),
-    }
 }
 
 fn load_config() -> Result<AppConfig> {
