@@ -2,7 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::stream::{BoxStream, StreamExt};
-use tokio::time::{interval, Duration};
+use tokio::time::{Duration, interval};
 use tokio_stream::wrappers::IntervalStream;
 
 use crate::{AsrProvider, AsrResult};
@@ -36,7 +36,10 @@ impl AsrProvider for MockAsrProvider {
         "mock-asr"
     }
 
-    fn transcribe(&self, _audio: BoxStream<'static, Result<Bytes>>) -> BoxStream<'static, Result<AsrResult>> {
+    fn transcribe(
+        &self,
+        _audio: BoxStream<'static, Result<Bytes>>,
+    ) -> BoxStream<'static, Result<AsrResult>> {
         let chunks = self.chunks.clone();
         let count = chunks.len();
         let ticker = IntervalStream::new(interval(Duration::from_millis(300)));

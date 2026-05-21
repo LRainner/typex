@@ -18,8 +18,10 @@ pub trait AsrProvider: Send + Sync {
     /// Stream audio in, get text chunks out.
     /// The implementation owns the audio ingestion loop and yields
     /// partial/final results as they become available.
-    fn transcribe(&self, audio: BoxStream<'static, Result<Bytes>>)
-        -> BoxStream<'static, Result<AsrResult>>;
+    fn transcribe(
+        &self,
+        audio: BoxStream<'static, Result<Bytes>>,
+    ) -> BoxStream<'static, Result<AsrResult>>;
 }
 
 pub mod mock;

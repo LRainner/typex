@@ -24,7 +24,10 @@ impl LlmProvider for MockLlmProvider {
         "mock-llm"
     }
 
-    fn optimize(&self, text: BoxStream<'static, Result<String>>) -> BoxStream<'static, Result<LlmResult>> {
+    fn optimize(
+        &self,
+        text: BoxStream<'static, Result<String>>,
+    ) -> BoxStream<'static, Result<LlmResult>> {
         let stream = text.enumerate().map(|(i, chunk)| {
             let t = chunk?;
             let is_final = false; // In a real impl, detect end-of-stream

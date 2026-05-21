@@ -1,9 +1,9 @@
+use crate::{AsrProvider, AsrResult};
 use anyhow::Result;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::stream::{BoxStream, StreamExt};
 use serde::Deserialize;
-use crate::{AsrProvider, AsrResult};
 
 // PCM format: 16kHz, 16-bit, mono — Whisper API standard
 const SAMPLE_RATE: u32 = 16000;
@@ -37,7 +37,10 @@ impl OpenAiCompatibleAsrProvider {
             api_key,
             model,
             language: None,
-            segment_bytes: (SAMPLE_RATE as usize) * (BYTES_PER_SAMPLE as usize) * (CHANNELS as usize) * 3,
+            segment_bytes: (SAMPLE_RATE as usize)
+                * (BYTES_PER_SAMPLE as usize)
+                * (CHANNELS as usize)
+                * 3,
             client: reqwest::Client::new(),
         }
     }
@@ -48,7 +51,9 @@ impl OpenAiCompatibleAsrProvider {
     }
 
     pub fn with_segment_duration(mut self, seconds: f32) -> Self {
-        self.segment_bytes = (SAMPLE_RATE as f32 * BYTES_PER_SAMPLE as f32 * CHANNELS as f32 * seconds.max(0.1)) as usize;
+        self.segment_bytes =
+            (SAMPLE_RATE as f32 * BYTES_PER_SAMPLE as f32 * CHANNELS as f32 * seconds.max(0.1))
+                as usize;
         self
     }
 
@@ -86,7 +91,10 @@ impl AsrProvider for OpenAiCompatibleAsrProvider {
         "openai-compatible-asr"
     }
 
-    fn transcribe(&self, audio: BoxStream<'static, Result<Bytes>>) -> BoxStream<'static, Result<AsrResult>> {
+    fn transcribe(
+        &self,
+        audio: BoxStream<'static, Result<Bytes>>,
+    ) -> BoxStream<'static, Result<AsrResult>> {
         let endpoint = self.endpoint.clone();
         let api_key = self.api_key.clone();
         let model = self.model.clone();
@@ -114,18 +122,28 @@ impl AsrProvider for OpenAiCompatibleAsrProvider {
 
                 while buffer.len() >= segment_bytes {
                     let segment: Vec<u8> = buffer.drain(..segment_bytes).collect();
-                    match transcribe_segment(&client, &endpoint, &api_key, &model, &language, &segment).await {
+                    match transcribe_segment(
+                        &client, &endpoint, &api_key, &model, &language, &segment,
+                    )
+                    .await
+                    {
                         Ok(text) => {
-                            if tx.send(Ok(AsrResult {
-                                text,
-                                is_final: false,
-                                confidence: 1.0,
-                            })).await.is_err() {
+                            if tx
+                                .send(Ok(AsrResult {
+                                    text,
+                                    is_final: false,
+                                    confidence: 1.0,
+                                }))
+                                .await
+                                .is_err()
+                            {
                                 return;
                             }
                         }
                         Err(e) => {
-                            let _ = tx.send(Err(e.context("segment transcription failed"))).await;
+                            let _ = tx
+                                .send(Err(e.context("segment transcription failed")))
+                                .await;
                             ok = false;
                         }
                     }
@@ -133,24 +151,30 @@ impl AsrProvider for OpenAiCompatibleAsrProvider {
             }
 
             if ok && !buffer.is_empty() {
-                match transcribe_segment(&client, &endpoint, &api_key, &model, &language, &buffer).await {
+                match transcribe_segment(&client, &endpoint, &api_key, &model, &language, &buffer)
+                    .await
+                {
                     Ok(text) => {
-                        let _ = tx.send(Ok(AsrResult {
-                            text,
-                            is_final: true,
-                            confidence: 1.0,
-                        })).await;
+                        let _ = tx
+                            .send(Ok(AsrResult {
+                                text,
+                                is_final: true,
+                                confidence: 1.0,
+                            }))
+                            .await;
                     }
                     Err(e) => {
                         let _ = tx.send(Err(e.context("final segment failed"))).await;
                     }
                 }
             } else if ok {
-                let _ = tx.send(Ok(AsrResult {
-                    text: String::new(),
-                    is_final: true,
-                    confidence: 1.0,
-                })).await;
+                let _ = tx
+                    .send(Ok(AsrResult {
+                        text: String::new(),
+                        is_final: true,
+                        confidence: 1.0,
+                    }))
+                    .await;
             }
         });
 
@@ -227,21 +251,31 @@ fn pcm_to_wav(pcm: &[u8]) -> Result<Vec<u8>> {
     {
         let mut writer = hound::WavWriter::new(&mut cursor, spec)
             .map_err(|e| anyhow::anyhow!("wav writer init failed: {}", e))?;
-        if pcm.len() % 2 != 0 {
-            tracing::warn!("odd-length PCM data ({} bytes), dropping last byte", pcm.len());
+        if !pcm.len().is_multiple_of(2) {
+            tracing::warn!(
+                "odd-length PCM data ({} bytes), dropping last byte",
+                pcm.len()
+            );
         }
         for chunk in pcm.chunks_exact(2) {
-            writer.write_sample(i16::from_le_bytes([chunk[0], chunk[1]]))
+            writer
+                .write_sample(i16::from_le_bytes([chunk[0], chunk[1]]))
                 .map_err(|e| anyhow::anyhow!("wav write sample failed: {}", e))?;
         }
-        writer.finalize()
+        writer
+            .finalize()
             .map_err(|e| anyhow::anyhow!("wav finalize failed: {}", e))?;
     }
     Ok(cursor.into_inner())
 }
 
 fn guess_mime(filename: &str) -> &'static str {
-    match filename.rsplit('.').next().map(|s| s.to_lowercase()).as_deref() {
+    match filename
+        .rsplit('.')
+        .next()
+        .map(|s| s.to_lowercase())
+        .as_deref()
+    {
         Some("mp3") => "audio/mpeg",
         Some("ogg") => "audio/ogg",
         Some("flac") => "audio/flac",
