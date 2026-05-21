@@ -18,7 +18,7 @@ async fn main() -> Result<()> {
         .init();
 
     let config = load_config()?;
-    let input_file = parse_input_arg();
+    let input_file = parse_input_arg()?;
 
     if let Some(path) = &input_file {
         // File mode: send audio directly to API, then apply plugins
@@ -131,14 +131,16 @@ fn create_openai_provider(config: &AppConfig) -> Result<Arc<OpenAiCompatibleAsrP
     Ok(Arc::new(provider))
 }
 
-fn parse_input_arg() -> Option<String> {
-    let mut args = std::env::args();
+fn parse_input_arg() -> Result<Option<String>> {
+    let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         if arg == "--input" {
-            return args.next();
+            let path = args.next()
+                .ok_or_else(|| anyhow::anyhow!("--input requires a file path"))?;
+            return Ok(Some(path));
         }
     }
-    None
+    Ok(None)
 }
 
 fn load_config() -> Result<AppConfig> {
