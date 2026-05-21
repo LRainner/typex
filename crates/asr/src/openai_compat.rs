@@ -54,7 +54,7 @@ impl OpenAiCompatibleAsrProvider {
 
     /// Transcribe a complete audio file (any format the API supports: wav, mp3, ogg, etc.).
     /// Sends the file as-is — no format conversion needed.
-    pub async fn transcribe_file(&self, file_data: &[u8], filename: &str) -> Result<AsrResult> {
+    pub async fn transcribe_file(&self, file_data: Vec<u8>, filename: &str) -> Result<AsrResult> {
         let url = format!("{}/audio/transcriptions", self.endpoint.trim_end_matches('/'));
 
         let mime = guess_mime(filename);
@@ -63,7 +63,7 @@ impl OpenAiCompatibleAsrProvider {
             .text("response_format", "json".to_string())
             .part(
                 "file",
-                reqwest::multipart::Part::bytes(file_data.to_vec())
+                reqwest::multipart::Part::bytes(file_data)
                     .file_name(filename.to_string())
                     .mime_str(mime)?,
             );

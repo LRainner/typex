@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
             .unwrap_or("audio.wav");
 
         tracing::info!("transcribing {} ({} bytes)", filename, file_data.len());
-        let result = provider.transcribe_file(&file_data, filename).await?;
+        let result = provider.transcribe_file(file_data, filename).await?;
 
         let text = apply_plugins(&result.text, &config).await;
 
