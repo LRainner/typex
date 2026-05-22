@@ -110,13 +110,13 @@ impl MicrophoneCapture {
             let mut input_buffer: Vec<f64> = Vec::new();
 
             while let Some(chunk) = raw_stream.next().await {
-                input_buffer.extend(chunk.iter().map(|&s| f64::from(s)));
-
                 if let Some(ref mut resampler) = resampler {
+                    input_buffer.extend(chunk.iter().map(|&s| f64::from(s)));
+
                     let needed = resampler.input_frames_next();
                     while input_buffer.len() >= needed {
-                        let buf = audioadapter_buffers::owned::InterleavedOwned::new_from(
-                            input_buffer[..needed].to_vec(),
+                        let buf = audioadapter_buffers::direct::InterleavedSlice::new(
+                            &input_buffer[..needed],
                             1,
                             needed,
                         )
@@ -142,19 +142,18 @@ impl MicrophoneCapture {
                         input_buffer.drain(..needed);
                     }
                 } else {
-                    let pcm = f64_to_pcm_bytes(&input_buffer);
+                    let pcm = f32_to_pcm_bytes(&chunk);
                     if out_tx.send(Ok(pcm)).await.is_err() {
                         return;
                     }
-                    input_buffer.clear();
                 }
             }
 
             // Flush remaining samples
             if !input_buffer.is_empty() {
                 if let Some(ref mut resampler) = resampler {
-                    let buf = audioadapter_buffers::owned::InterleavedOwned::new_from(
-                        input_buffer.to_vec(),
+                    let buf = audioadapter_buffers::direct::InterleavedSlice::new(
+                        &input_buffer,
                         1,
                         input_buffer.len(),
                     )
@@ -165,8 +164,7 @@ impl MicrophoneCapture {
                         let _ = out_tx.send(Ok(pcm)).await;
                     }
                 } else {
-                    let pcm = f64_to_pcm_bytes(&input_buffer);
-                    let _ = out_tx.send(Ok(pcm)).await;
+                    // Non-resampling path doesn't buffer, so nothing to flush
                 }
             }
         });
@@ -196,6 +194,15 @@ fn build_input_stream(
 }
 
 fn f64_to_pcm_bytes(samples: &[f64]) -> Bytes {
+    let mut pcm = Vec::with_capacity(samples.len() * 2);
+    for &sample in samples {
+        let value = (sample.clamp(-1.0, 1.0) * 32767.0) as i16;
+        pcm.extend_from_slice(&value.to_le_bytes());
+    }
+    Bytes::from(pcm)
+}
+
+fn f32_to_pcm_bytes(samples: &[f32]) -> Bytes {
     let mut pcm = Vec::with_capacity(samples.len() * 2);
     for &sample in samples {
         let value = (sample.clamp(-1.0, 1.0) * 32767.0) as i16;
