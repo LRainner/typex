@@ -70,7 +70,7 @@ impl MicrophoneCapture {
 
         tracing::info!("microphone capture started, press Ctrl+C to stop");
 
-        let (out_tx, out_rx) = tokio::sync::mpsc::channel::<Result<Bytes>>(8);
+        let (out_tx, out_rx) = tokio::sync::mpsc::channel::<Result<Bytes>>(32);
 
         tokio::spawn(async move {
             use tokio_stream::StreamExt as _;
@@ -124,7 +124,7 @@ impl MicrophoneCapture {
                         match resampler.process(&buf, 0, None) {
                             Ok(output) => {
                                 let samples = output.take_data();
-                                let pcm = f64_to_pcm_bytes(&samples);
+                                let pcm = float_to_pcm_bytes(&samples);
                                 if out_tx.send(Ok(pcm)).await.is_err() {
                                     return;
                                 }
@@ -142,7 +142,7 @@ impl MicrophoneCapture {
                         input_buffer.drain(..needed);
                     }
                 } else {
-                    let pcm = f32_to_pcm_bytes(&chunk);
+                    let pcm = float_to_pcm_bytes(&chunk);
                     if out_tx.send(Ok(pcm)).await.is_err() {
                         return;
                     }
@@ -160,7 +160,7 @@ impl MicrophoneCapture {
                     .unwrap();
                     if let Ok(output) = resampler.process(&buf, 0, None) {
                         let samples = output.take_data();
-                        let pcm = f64_to_pcm_bytes(&samples);
+                        let pcm = float_to_pcm_bytes(&samples);
                         let _ = out_tx.send(Ok(pcm)).await;
                     }
                 } else {
@@ -193,19 +193,13 @@ fn build_input_stream(
     Ok(stream)
 }
 
-fn f64_to_pcm_bytes(samples: &[f64]) -> Bytes {
+fn float_to_pcm_bytes<T>(samples: &[T]) -> Bytes
+where
+    T: Into<f64> + Copy,
+{
     let mut pcm = Vec::with_capacity(samples.len() * 2);
     for &sample in samples {
-        let value = (sample.clamp(-1.0, 1.0) * 32767.0) as i16;
-        pcm.extend_from_slice(&value.to_le_bytes());
-    }
-    Bytes::from(pcm)
-}
-
-fn f32_to_pcm_bytes(samples: &[f32]) -> Bytes {
-    let mut pcm = Vec::with_capacity(samples.len() * 2);
-    for &sample in samples {
-        let value = (sample.clamp(-1.0, 1.0) * 32767.0) as i16;
+        let value = (Into::<f64>::into(sample).clamp(-1.0, 1.0) * 32767.0) as i16;
         pcm.extend_from_slice(&value.to_le_bytes());
     }
     Bytes::from(pcm)
