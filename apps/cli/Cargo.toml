@@ -15,6 +15,7 @@ typex-pipeline = { workspace = true }
 typex-injector = { workspace = true }
 typex-config = { workspace = true }
 typex-plugin = { workspace = true }
+typex-audio = { workspace = true }
 anyhow = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }

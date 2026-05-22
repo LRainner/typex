@@ -14,6 +14,9 @@ pub struct AppConfig {
 
     #[serde(default)]
     pub injector: InjectorConfig,
+
+    #[serde(default)]
+    pub audio: AudioConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,4 +116,10 @@ impl Default for InjectorConfig {
             method: default_injector(),
         }
     }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AudioConfig {
+    #[serde(default)]
+    pub device: Option<String>,
 }

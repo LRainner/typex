@@ -8,6 +8,7 @@ members = [
     "crates/injector",
     "crates/config",
     "crates/plugin",
+    "crates/audio",
     "apps/cli",
     "apps/desktop",
 ]
@@ -42,3 +43,4 @@ typex-pipeline = { path = "crates/pipeline" }
 typex-injector = { path = "crates/injector" }
 typex-config = { path = "crates/config" }
 typex-plugin = { path = "crates/plugin" }
+typex-audio = { path = "crates/audio" }
