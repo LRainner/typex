@@ -8,8 +8,11 @@ A system-level AI voice input tool. Real-time streaming ASR → text optimizatio
 # Build
 cargo build
 
-# Run CLI demo
+# Run stream mode (microphone capture + real-time transcription)
 cargo run -p typex-cli
+
+# Run file mode (transcribe a WAV file)
+cargo run -p typex-cli -- --input audio.wav
 
 # Customize config
 cp config.example.toml config.toml
@@ -19,7 +22,7 @@ cp config.example.toml config.toml
 ## Architecture
 
 ```
-audio → ASR → text chunk → plugins → LLM (optional) → injector → target app
+microphone → capture → resample (→ 16kHz mono PCM) → ASR → text → plugins → LLM (optional) → injector → target app
 ```
 
 ## Crates
@@ -27,6 +30,7 @@ audio → ASR → text chunk → plugins → LLM (optional) → injector → tar
 | Crate | Description |
 |-------|-------------|
 | `typex-core` | Top-level re-exports and builder |
+| `typex-audio` | Microphone capture with cpal + rubato resampling |
 | `typex-asr` | ASR provider trait + implementations |
 | `typex-llm` | LLM provider trait + implementations |
 | `typex-pipeline` | Streaming pipeline orchestration |
