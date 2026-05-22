@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use anyhow::Result;
 use bytes::Bytes;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -52,9 +54,11 @@ impl MicrophoneCapture {
 
         let supported_config = device.default_input_config()?;
         let input_sample_rate: u32 = supported_config.sample_rate();
+        let channels = supported_config.channels() as usize;
         tracing::info!(
-            "device sample rate: {}Hz, target: {}Hz",
+            "device sample rate: {}Hz, channels: {}, target: {}Hz",
             input_sample_rate,
+            channels,
             self.target_sample_rate
         );
 
@@ -107,18 +111,19 @@ impl MicrophoneCapture {
                 None
             };
 
-            let mut input_buffer: Vec<f64> = Vec::new();
+            let mut input_buffer: VecDeque<f64> = VecDeque::new();
 
             while let Some(chunk) = raw_stream.next().await {
+                let mono = downmix_to_mono(&chunk, channels);
                 if let Some(ref mut resampler) = resampler {
-                    input_buffer.extend(chunk.iter().map(|&s| f64::from(s)));
+                    input_buffer.extend(mono.iter().map(|&s| f64::from(s)));
 
                     let needed = resampler.input_frames_next();
                     while input_buffer.len() >= needed {
+                        let consumed = needed;
+                        let buf_chunk: Vec<f64> = input_buffer.drain(..consumed).collect();
                         let buf = audioadapter_buffers::direct::InterleavedSlice::new(
-                            &input_buffer[..needed],
-                            1,
-                            needed,
+                            &buf_chunk, 1, consumed,
                         )
                         .unwrap();
                         match resampler.process(&buf, 0, None) {
@@ -139,10 +144,9 @@ impl MicrophoneCapture {
                                 }
                             }
                         }
-                        input_buffer.drain(..needed);
                     }
                 } else {
-                    let pcm = float_to_pcm_bytes(&chunk);
+                    let pcm = float_to_pcm_bytes(&mono);
                     if out_tx.send(Ok(pcm)).await.is_err() {
                         return;
                     }
@@ -150,21 +154,20 @@ impl MicrophoneCapture {
             }
 
             // Flush remaining samples
-            if !input_buffer.is_empty() {
-                if let Some(ref mut resampler) = resampler {
-                    let buf = audioadapter_buffers::direct::InterleavedSlice::new(
-                        &input_buffer,
-                        1,
-                        input_buffer.len(),
-                    )
-                    .unwrap();
-                    if let Ok(output) = resampler.process(&buf, 0, None) {
-                        let samples = output.take_data();
-                        let pcm = float_to_pcm_bytes(&samples);
-                        let _ = out_tx.send(Ok(pcm)).await;
-                    }
-                } else {
-                    // Non-resampling path doesn't buffer, so nothing to flush
+            if !input_buffer.is_empty()
+                && let Some(ref mut resampler) = resampler
+            {
+                let buf_chunk: Vec<f64> = input_buffer.drain(..).collect();
+                let buf = audioadapter_buffers::direct::InterleavedSlice::new(
+                    &buf_chunk,
+                    1,
+                    buf_chunk.len(),
+                )
+                .unwrap();
+                if let Ok(output) = resampler.process(&buf, 0, None) {
+                    let samples = output.take_data();
+                    let pcm = float_to_pcm_bytes(&samples);
+                    let _ = out_tx.send(Ok(pcm)).await;
                 }
             }
         });
@@ -173,6 +176,20 @@ impl MicrophoneCapture {
             futures::StreamExt::boxed(tokio_stream::wrappers::ReceiverStream::new(out_rx));
         Ok((stream, stream_out))
     }
+}
+
+fn downmix_to_mono(interleaved: &[f32], channels: usize) -> Vec<f32> {
+    if channels == 1 {
+        return interleaved.to_vec();
+    }
+    let frames = interleaved.len() / channels;
+    let mut mono = Vec::with_capacity(frames);
+    for frame_idx in 0..frames {
+        let offset = frame_idx * channels;
+        let sum: f32 = interleaved[offset..offset + channels].iter().sum();
+        mono.push(sum / channels as f32);
+    }
+    mono
 }
 
 fn build_input_stream(
