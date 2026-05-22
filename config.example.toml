@@ -21,3 +21,6 @@ plugins = ["filler_remover", "text_cleaner"]
 
 [injector]
 method = "clipboard"       # clipboard | platform
+
+[audio]
+# device = ""               # device name substring, empty = default

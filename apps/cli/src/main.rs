@@ -44,7 +44,7 @@ async fn main() -> Result<()> {
             println!("{}", text);
         }
     } else {
-        // Stream mode: pipeline with mock or microphone
+        // Stream mode: pipeline with microphone
         let asr: Arc<dyn AsrProvider> = match config.asr.provider.as_str() {
             "mock" => Arc::new(MockAsrProvider::new()),
             "openai-compatible" | "" => create_openai_provider(&config)?,
@@ -62,18 +62,31 @@ async fn main() -> Result<()> {
         builder = builder.injector(Arc::new(ClipboardInjector));
         let typex = builder.build();
 
-        let audio = futures::stream::empty::<Result<bytes::Bytes>>().boxed();
+        let capture = typex_audio::MicrophoneCapture::new(config.audio.device.clone());
+        let (_stream_handle, audio) = capture.start()?;
         let mut stream = typex.pipeline().run(audio);
 
-        while let Some(result) = stream.next().await {
-            match result {
-                Ok(output) => {
-                    let tag = if output.is_final { "FINAL" } else { "partial" };
-                    println!("[{}] {}", tag, output.text);
-                }
-                Err(e) => {
-                    tracing::error!("pipeline error: {}", e);
+        let ctrl_c = tokio::signal::ctrl_c();
+        tokio::pin!(ctrl_c);
+
+        loop {
+            tokio::select! {
+                _ = &mut ctrl_c => {
+                    tracing::info!("stopping capture...");
                     break;
+                }
+                result = stream.next() => {
+                    match result {
+                        Some(Ok(output)) => {
+                            let tag = if output.is_final { "FINAL" } else { "partial" };
+                            println!("[{}] {}", tag, output.text);
+                        }
+                        Some(Err(e)) => {
+                            tracing::error!("pipeline error: {}", e);
+                            break;
+                        }
+                        None => break,
+                    }
                 }
             }
         }

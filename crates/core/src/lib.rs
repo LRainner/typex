@@ -1,4 +1,5 @@
 pub use typex_asr;
+pub use typex_audio;
 pub use typex_config;
 pub use typex_injector;
 pub use typex_llm;
