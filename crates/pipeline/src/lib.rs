@@ -97,10 +97,13 @@ impl Pipeline {
                 let mut output = llm.optimize(input);
                 let mut optimized = String::new();
                 while let Some(res) = output.next().await {
-                    if !optimized.is_empty() {
-                        optimized.push(' ');
+                    let chunk = res?.text.trim().to_string();
+                    if !chunk.is_empty() {
+                        if !optimized.is_empty() {
+                            optimized.push(' ');
+                        }
+                        optimized.push_str(&chunk);
                     }
-                    optimized.push_str(&res?.text);
                 }
                 optimized
             }

@@ -205,8 +205,20 @@ fn spawn_resample_task(
                     let buf_chunk: Vec<f64> = input_buffer.drain(..consumed).collect();
                     let buf = audioadapter_buffers::direct::InterleavedSlice::new(
                         &buf_chunk, 1, consumed,
-                    )
-                    .unwrap();
+                    );
+                    let buf = match buf {
+                        Ok(b) => b,
+                        Err(e) => {
+                            if out_tx
+                                .send(Err(anyhow::anyhow!("buffer creation failed: {}", e)))
+                                .await
+                                .is_err()
+                            {
+                                return;
+                            }
+                            continue;
+                        }
+                    };
                     match resampler.process(&buf, 0, None) {
                         Ok(output) => {
                             let samples = output.take_data();
@@ -240,9 +252,10 @@ fn spawn_resample_task(
         {
             let buf_chunk: Vec<f64> = input_buffer.drain(..).collect();
             let buf =
-                audioadapter_buffers::direct::InterleavedSlice::new(&buf_chunk, 1, buf_chunk.len())
-                    .unwrap();
-            if let Ok(output) = resampler.process(&buf, 0, None) {
+                audioadapter_buffers::direct::InterleavedSlice::new(&buf_chunk, 1, buf_chunk.len());
+            if let Ok(buf) = buf
+                && let Ok(output) = resampler.process(&buf, 0, None)
+            {
                 let samples = output.take_data();
                 let pcm = float_to_pcm_bytes(&samples);
                 let _ = out_tx.send(Ok(pcm)).await;
