@@ -8,6 +8,12 @@ use rubato::Resampler;
 
 const TARGET_SAMPLE_RATE: u32 = 16000;
 
+struct DeviceInfo {
+    channels: usize,
+    needs_resampling: bool,
+    resample_ratio: f64,
+}
+
 pub struct MicrophoneCapture {
     device_name: Option<String>,
     target_sample_rate: u32,
@@ -30,7 +36,50 @@ impl MicrophoneCapture {
         Ok(devices)
     }
 
+    /// Start continuous streaming capture.
     pub fn start(&self) -> Result<(cpal::Stream, BoxStream<'static, Result<Bytes>>)> {
+        let (stream, raw_rx, info) = self.setup_device_and_stream()?;
+        tracing::info!("microphone capture started, press Ctrl+C to stop");
+        let (out_tx, out_rx) = tokio::sync::mpsc::channel::<Result<Bytes>>(32);
+        spawn_resample_task(raw_rx, info, out_tx);
+        let stream_out =
+            futures::StreamExt::boxed(tokio_stream::wrappers::ReceiverStream::new(out_rx));
+        Ok((stream, stream_out))
+    }
+
+    /// Start a session-mode recording. Call `SessionRecorder::stop()` to end.
+    pub fn record_session(&self) -> Result<SessionRecorder> {
+        let (stream, raw_rx, info) = self.setup_device_and_stream()?;
+        tracing::info!("session recording started");
+        let (out_tx, mut out_rx) = tokio::sync::mpsc::channel::<Result<Bytes>>(32);
+        spawn_resample_task(raw_rx, info, out_tx);
+
+        // Spawn an accumulator task that continuously drains the output channel
+        // into a Vec, preventing backpressure on the resampling task.
+        let accumulator = tokio::spawn(async move {
+            let mut pcm = Vec::new();
+            while let Some(chunk) = out_rx.recv().await {
+                match chunk {
+                    Ok(data) => pcm.extend_from_slice(&data),
+                    Err(e) => return Err(e),
+                }
+            }
+            Ok(pcm)
+        });
+
+        Ok(SessionRecorder {
+            stream,
+            accumulator,
+        })
+    }
+
+    fn setup_device_and_stream(
+        &self,
+    ) -> Result<(
+        cpal::Stream,
+        tokio::sync::mpsc::Receiver<Vec<f32>>,
+        DeviceInfo,
+    )> {
         let host = cpal::default_host();
         let device = match &self.device_name {
             Some(name) => host
@@ -72,110 +121,134 @@ impl MicrophoneCapture {
         let stream = build_input_stream(&device, &config, raw_tx)?;
         stream.play()?;
 
-        tracing::info!("microphone capture started, press Ctrl+C to stop");
+        let info = DeviceInfo {
+            channels,
+            needs_resampling,
+            resample_ratio,
+        };
 
-        let (out_tx, out_rx) = tokio::sync::mpsc::channel::<Result<Bytes>>(32);
+        Ok((stream, raw_rx, info))
+    }
+}
 
-        tokio::spawn(async move {
-            use tokio_stream::StreamExt as _;
-            let mut raw_stream = tokio_stream::wrappers::ReceiverStream::new(raw_rx);
+pub struct SessionRecorder {
+    stream: cpal::Stream,
+    accumulator: tokio::task::JoinHandle<Result<Vec<u8>>>,
+}
 
-            let mut resampler: Option<rubato::Async<f64>> = if needs_resampling {
-                let sinc_params = rubato::SincInterpolationParameters {
-                    sinc_len: 256,
-                    f_cutoff: rubato::calculate_cutoff(
-                        256,
-                        rubato::WindowFunction::BlackmanHarris2,
-                    ),
-                    oversampling_factor: 256,
-                    interpolation: rubato::SincInterpolationType::Linear,
-                    window: rubato::WindowFunction::BlackmanHarris2,
-                };
-                match rubato::Async::new_sinc(
-                    resample_ratio,
-                    2.0,
-                    &sinc_params,
-                    1024,
-                    1,
-                    rubato::FixedAsync::Output,
-                ) {
-                    Ok(r) => Some(r),
-                    Err(e) => {
-                        let _ = out_tx
-                            .send(Err(anyhow::anyhow!("resampler init failed: {}", e)))
-                            .await;
-                        return;
-                    }
-                }
-            } else {
-                None
+impl SessionRecorder {
+    /// Stop recording and return all captured PCM audio (16kHz 16-bit mono).
+    pub async fn stop(self) -> Result<Vec<u8>> {
+        // Dropping the cpal stream stops audio capture. The cpal callback
+        // closure is dropped along with the sender side of the raw channel,
+        // so the resampling task will eventually see the raw stream end,
+        // flush remaining samples, and close the output channel.
+        // The accumulator task will then finish and return all collected PCM.
+        drop(self.stream);
+        self.accumulator.await?
+    }
+}
+
+fn spawn_resample_task(
+    raw_rx: tokio::sync::mpsc::Receiver<Vec<f32>>,
+    info: DeviceInfo,
+    out_tx: tokio::sync::mpsc::Sender<Result<Bytes>>,
+) {
+    let DeviceInfo {
+        channels,
+        needs_resampling,
+        resample_ratio,
+    } = info;
+
+    tokio::spawn(async move {
+        use tokio_stream::StreamExt as _;
+        let mut raw_stream = tokio_stream::wrappers::ReceiverStream::new(raw_rx);
+
+        let mut resampler: Option<rubato::Async<f64>> = if needs_resampling {
+            let sinc_params = rubato::SincInterpolationParameters {
+                sinc_len: 256,
+                f_cutoff: rubato::calculate_cutoff(256, rubato::WindowFunction::BlackmanHarris2),
+                oversampling_factor: 256,
+                interpolation: rubato::SincInterpolationType::Linear,
+                window: rubato::WindowFunction::BlackmanHarris2,
             };
+            match rubato::Async::new_sinc(
+                resample_ratio,
+                2.0,
+                &sinc_params,
+                1024,
+                1,
+                rubato::FixedAsync::Output,
+            ) {
+                Ok(r) => Some(r),
+                Err(e) => {
+                    let _ = out_tx
+                        .send(Err(anyhow::anyhow!("resampler init failed: {}", e)))
+                        .await;
+                    return;
+                }
+            }
+        } else {
+            None
+        };
 
-            let mut input_buffer: VecDeque<f64> = VecDeque::new();
+        let mut input_buffer: VecDeque<f64> = VecDeque::new();
 
-            while let Some(chunk) = raw_stream.next().await {
-                let mono = downmix_to_mono(&chunk, channels);
-                if let Some(ref mut resampler) = resampler {
-                    input_buffer.extend(mono.iter().map(|&s| f64::from(s)));
+        while let Some(chunk) = raw_stream.next().await {
+            let mono = downmix_to_mono(&chunk, channels);
+            if let Some(ref mut resampler) = resampler {
+                input_buffer.extend(mono.iter().map(|&s| f64::from(s)));
 
-                    let needed = resampler.input_frames_next();
-                    while input_buffer.len() >= needed {
-                        let consumed = needed;
-                        let buf_chunk: Vec<f64> = input_buffer.drain(..consumed).collect();
-                        let buf = audioadapter_buffers::direct::InterleavedSlice::new(
-                            &buf_chunk, 1, consumed,
-                        )
-                        .unwrap();
-                        match resampler.process(&buf, 0, None) {
-                            Ok(output) => {
-                                let samples = output.take_data();
-                                let pcm = float_to_pcm_bytes(&samples);
-                                if out_tx.send(Ok(pcm)).await.is_err() {
-                                    return;
-                                }
+                let needed = resampler.input_frames_next();
+                while input_buffer.len() >= needed {
+                    let consumed = needed;
+                    let buf_chunk: Vec<f64> = input_buffer.drain(..consumed).collect();
+                    let buf = audioadapter_buffers::direct::InterleavedSlice::new(
+                        &buf_chunk, 1, consumed,
+                    )
+                    .unwrap();
+                    match resampler.process(&buf, 0, None) {
+                        Ok(output) => {
+                            let samples = output.take_data();
+                            let pcm = float_to_pcm_bytes(&samples);
+                            if out_tx.send(Ok(pcm)).await.is_err() {
+                                return;
                             }
-                            Err(e) => {
-                                if out_tx
-                                    .send(Err(anyhow::anyhow!("resample error: {}", e)))
-                                    .await
-                                    .is_err()
-                                {
-                                    return;
-                                }
+                        }
+                        Err(e) => {
+                            if out_tx
+                                .send(Err(anyhow::anyhow!("resample error: {}", e)))
+                                .await
+                                .is_err()
+                            {
+                                return;
                             }
                         }
                     }
-                } else {
-                    let pcm = float_to_pcm_bytes(&mono);
-                    if out_tx.send(Ok(pcm)).await.is_err() {
-                        return;
-                    }
+                }
+            } else {
+                let pcm = float_to_pcm_bytes(&mono);
+                if out_tx.send(Ok(pcm)).await.is_err() {
+                    return;
                 }
             }
+        }
 
-            // Flush remaining samples
-            if !input_buffer.is_empty()
-                && let Some(ref mut resampler) = resampler
-            {
-                let buf_chunk: Vec<f64> = input_buffer.drain(..).collect();
-                let buf = audioadapter_buffers::direct::InterleavedSlice::new(
-                    &buf_chunk,
-                    1,
-                    buf_chunk.len(),
-                )
-                .unwrap();
-                if let Ok(output) = resampler.process(&buf, 0, None) {
-                    let samples = output.take_data();
-                    let pcm = float_to_pcm_bytes(&samples);
-                    let _ = out_tx.send(Ok(pcm)).await;
-                }
+        // Flush remaining samples
+        if !input_buffer.is_empty()
+            && let Some(ref mut resampler) = resampler
+        {
+            let buf_chunk: Vec<f64> = input_buffer.drain(..).collect();
+            let buf =
+                audioadapter_buffers::direct::InterleavedSlice::new(&buf_chunk, 1, buf_chunk.len())
+                    .unwrap();
+            if let Ok(output) = resampler.process(&buf, 0, None) {
+                let samples = output.take_data();
+                let pcm = float_to_pcm_bytes(&samples);
+                let _ = out_tx.send(Ok(pcm)).await;
             }
-        });
-
-        let stream_out =
-            futures::StreamExt::boxed(tokio_stream::wrappers::ReceiverStream::new(out_rx));
-        Ok((stream, stream_out))
-    }
+        }
+    });
 }
 
 fn downmix_to_mono(interleaved: &[f32], channels: usize) -> Vec<f32> {

@@ -45,8 +45,6 @@ impl Pipeline {
         self
     }
 
-    /// Run the full streaming pipeline:
-    ///   audio → ASR → plugins → LLM (optional) → output
     pub fn run(
         &self,
         audio: BoxStream<'static, Result<bytes::Bytes>>,
@@ -56,10 +54,8 @@ impl Pipeline {
         let plugins = self.plugins.clone();
         let injector = self.injector.clone();
 
-        // Stage 1: ASR
         let asr_stream = asr.transcribe(audio);
 
-        // Stage 2: Apply plugins to each ASR result
         let plugin_stream = asr_stream.then(move |result| {
             let plugins = plugins.clone();
             let injector = injector.clone();
@@ -68,7 +64,6 @@ impl Pipeline {
 
                 let text = apply_plugins(&asr_result.text, &asr_result, &plugins).await?;
 
-                // Inject into system if injector is set
                 if let Some(ref inj) = injector
                     && let Err(e) = inj.inject(&text)
                 {
@@ -82,7 +77,6 @@ impl Pipeline {
             }
         });
 
-        // Stage 3: LLM optimization (optional)
         if let Some(llm) = llm {
             let llm_stream = Self::attach_llm(plugin_stream, llm);
             llm_stream.boxed()
@@ -91,14 +85,30 @@ impl Pipeline {
         }
     }
 
+    pub async fn run_session(&self, pcm_data: Vec<u8>) -> Result<PipelineOutput> {
+        let wav = typex_asr::pcm_to_wav(&pcm_data)?;
+        let asr_result = self.asr.transcribe_file(wav, "audio.wav").await?;
+
+        let text = apply_plugins(&asr_result.text, &asr_result, &self.plugins).await?;
+
+        if let Some(ref inj) = self.injector
+            && let Err(e) = inj.inject(&text)
+        {
+            tracing::warn!("injector failed: {}", e);
+        }
+
+        Ok(PipelineOutput {
+            text,
+            is_final: true,
+        })
+    }
+
     fn attach_llm(
         input: impl futures::Stream<Item = Result<PipelineOutput>> + Send + 'static,
         llm: Arc<dyn LlmProvider>,
     ) -> BoxStream<'static, Result<PipelineOutput>> {
-        // Collect final chunks, send to LLM as a stream, and yield LLM output
         let (tx, rx) = tokio::sync::mpsc::channel::<String>(32);
 
-        // Forward final text chunks to LLM input channel
         let forwarder = input.for_each(move |item| {
             let tx = tx.clone();
             async move {
@@ -108,15 +118,12 @@ impl Pipeline {
             }
         });
 
-        // Create LLM input stream from channel
         let llm_input = tokio_stream::wrappers::ReceiverStream::new(rx)
             .map(Ok)
             .boxed();
 
         let llm_output = llm.optimize(llm_input);
 
-        // Merge: yield original non-final chunks, then LLM results
-        // For simplicity, just return the LLM stream
         let merged = llm_output.map(|r| {
             let lr = r?;
             Ok(PipelineOutput {
@@ -125,7 +132,6 @@ impl Pipeline {
             })
         });
 
-        // Spawn the forwarder in background
         tokio::spawn(forwarder);
 
         merged.boxed()
