@@ -221,8 +221,8 @@ async fn post_transcription(
     form: reqwest::multipart::Form,
 ) -> Result<String> {
     let mut req = client.post(url);
-    if let Some(key) = api_key {
-        req = req.header("Authorization", format!("Bearer {}", key));
+    if let Some(key) = api_key.as_deref().filter(|s| !s.is_empty()) {
+        req = req.bearer_auth(key);
     }
     let resp = req.multipart(form).send().await?;
 

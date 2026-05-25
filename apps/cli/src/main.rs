@@ -145,7 +145,8 @@ fn create_openai_provider(config: &AppConfig) -> Result<Arc<OpenAiCompatibleAsrP
         .asr
         .api_key
         .clone()
-        .or_else(|| std::env::var("OPENAI_API_KEY").ok());
+        .or_else(|| std::env::var("OPENAI_API_KEY").ok())
+        .filter(|s| !s.is_empty());
     let model = config.asr.model.as_deref().unwrap_or("whisper-1");
 
     let mut provider =
