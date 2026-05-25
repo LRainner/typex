@@ -32,7 +32,10 @@ pub trait AsrProvider: Send + Sync {
         while let Some(result) = results.next().await {
             match result {
                 Ok(r) => {
-                    final_text = r.text;
+                    if !final_text.is_empty() {
+                        final_text.push(' ');
+                    }
+                    final_text.push_str(&r.text);
                     if r.is_final {
                         break;
                     }

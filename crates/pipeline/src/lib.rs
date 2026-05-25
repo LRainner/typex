@@ -91,14 +91,30 @@ impl Pipeline {
 
         let text = apply_plugins(&asr_result.text, &asr_result, &self.plugins).await?;
 
+        let final_text = match &self.llm {
+            Some(llm) => {
+                let input = futures::stream::once(async move { Ok(text) }).boxed();
+                let mut output = llm.optimize(input);
+                let mut optimized = String::new();
+                while let Some(res) = output.next().await {
+                    if !optimized.is_empty() {
+                        optimized.push(' ');
+                    }
+                    optimized.push_str(&res?.text);
+                }
+                optimized
+            }
+            None => text,
+        };
+
         if let Some(ref inj) = self.injector
-            && let Err(e) = inj.inject(&text)
+            && let Err(e) = inj.inject(&final_text)
         {
             tracing::warn!("injector failed: {}", e);
         }
 
         Ok(PipelineOutput {
-            text,
+            text: final_text,
             is_final: true,
         })
     }
