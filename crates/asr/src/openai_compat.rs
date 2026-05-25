@@ -83,7 +83,7 @@ impl AsrProvider for OpenAiCompatibleAsrProvider {
             form = form.text("language", lang.clone());
         }
 
-        let text = post_transcription(&self.client, &url, &self.api_key, form).await?;
+        let text = post_transcription(&self.client, &url, self.api_key.as_deref(), form).await?;
         Ok(AsrResult {
             text,
             is_final: true,
@@ -123,7 +123,12 @@ impl AsrProvider for OpenAiCompatibleAsrProvider {
                 while buffer.len() >= segment_bytes {
                     let segment: Vec<u8> = buffer.drain(..segment_bytes).collect();
                     match transcribe_segment(
-                        &client, &endpoint, &api_key, &model, &language, &segment,
+                        &client,
+                        &endpoint,
+                        api_key.as_deref(),
+                        &model,
+                        &language,
+                        &segment,
                     )
                     .await
                     {
@@ -151,8 +156,15 @@ impl AsrProvider for OpenAiCompatibleAsrProvider {
             }
 
             if ok && !buffer.is_empty() {
-                match transcribe_segment(&client, &endpoint, &api_key, &model, &language, &buffer)
-                    .await
+                match transcribe_segment(
+                    &client,
+                    &endpoint,
+                    api_key.as_deref(),
+                    &model,
+                    &language,
+                    &buffer,
+                )
+                .await
                 {
                     Ok(text) => {
                         let _ = tx
@@ -185,7 +197,7 @@ impl AsrProvider for OpenAiCompatibleAsrProvider {
 async fn transcribe_segment(
     client: &reqwest::Client,
     endpoint: &str,
-    api_key: &Option<String>,
+    api_key: Option<&str>,
     model: &str,
     language: &Option<String>,
     pcm_data: &[u8],
@@ -217,11 +229,11 @@ fn transcription_url(endpoint: &str) -> String {
 async fn post_transcription(
     client: &reqwest::Client,
     url: &str,
-    api_key: &Option<String>,
+    api_key: Option<&str>,
     form: reqwest::multipart::Form,
 ) -> Result<String> {
     let mut req = client.post(url);
-    if let Some(key) = api_key.as_deref().filter(|s| !s.is_empty()) {
+    if let Some(key) = api_key.map(|s| s.trim()).filter(|s| !s.is_empty()) {
         req = req.bearer_auth(key);
     }
     let resp = req.multipart(form).send().await?;
