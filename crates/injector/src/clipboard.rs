@@ -12,7 +12,7 @@ impl Injector for ClipboardInjector {
 
     fn inject(&self, text: &str) -> Result<()> {
         // TODO: use arboard or Cocoa NSPasteboard
-        println!("[clipboard-inject] {}", text);
+        tracing::debug!("clipboard-inject: {}", text);
         Ok(())
     }
 }

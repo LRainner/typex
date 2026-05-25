@@ -28,6 +28,13 @@ impl TypeX {
     pub fn pipeline(&self) -> &Pipeline {
         &self.pipeline
     }
+
+    pub async fn run_session(
+        &self,
+        pcm_data: Vec<u8>,
+    ) -> anyhow::Result<typex_pipeline::PipelineOutput> {
+        self.pipeline.run_session(pcm_data).await
+    }
 }
 
 pub struct TypeXBuilder {

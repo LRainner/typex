@@ -56,10 +56,17 @@ impl OpenAiCompatibleAsrProvider {
                 as usize;
         self
     }
+}
+
+#[async_trait]
+impl AsrProvider for OpenAiCompatibleAsrProvider {
+    fn name(&self) -> &str {
+        "openai-compatible-asr"
+    }
 
     /// Transcribe a complete audio file (any format the API supports: wav, mp3, ogg, etc.).
     /// Sends the file as-is — no format conversion needed.
-    pub async fn transcribe_file(&self, file_data: Vec<u8>, filename: &str) -> Result<AsrResult> {
+    async fn transcribe_file(&self, file_data: Vec<u8>, filename: &str) -> Result<AsrResult> {
         let url = transcription_url(&self.endpoint);
         let mime = guess_mime(filename);
         let mut form = reqwest::multipart::Form::new()
@@ -82,13 +89,6 @@ impl OpenAiCompatibleAsrProvider {
             is_final: true,
             confidence: 1.0,
         })
-    }
-}
-
-#[async_trait]
-impl AsrProvider for OpenAiCompatibleAsrProvider {
-    fn name(&self) -> &str {
-        "openai-compatible-asr"
     }
 
     fn transcribe(
@@ -190,7 +190,7 @@ async fn transcribe_segment(
     language: &Option<String>,
     pcm_data: &[u8],
 ) -> Result<String> {
-    let wav = pcm_to_wav(pcm_data)?;
+    let wav = crate::pcm_to_wav(pcm_data)?;
     let url = transcription_url(endpoint);
 
     let mut form = reqwest::multipart::Form::new()
@@ -235,38 +235,6 @@ async fn post_transcription(
 
     let result: TranscriptionResponse = resp.json().await?;
     Ok(result.text.trim().to_string())
-}
-
-/// Wrap raw PCM in a WAV header using hound.
-fn pcm_to_wav(pcm: &[u8]) -> Result<Vec<u8>> {
-    use std::io::Cursor;
-
-    let spec = hound::WavSpec {
-        channels: CHANNELS,
-        sample_rate: SAMPLE_RATE,
-        bits_per_sample: BITS_PER_SAMPLE,
-        sample_format: hound::SampleFormat::Int,
-    };
-    let mut cursor = Cursor::new(Vec::new());
-    {
-        let mut writer = hound::WavWriter::new(&mut cursor, spec)
-            .map_err(|e| anyhow::anyhow!("wav writer init failed: {}", e))?;
-        if !pcm.len().is_multiple_of(2) {
-            tracing::warn!(
-                "odd-length PCM data ({} bytes), dropping last byte",
-                pcm.len()
-            );
-        }
-        for chunk in pcm.chunks_exact(2) {
-            writer
-                .write_sample(i16::from_le_bytes([chunk[0], chunk[1]]))
-                .map_err(|e| anyhow::anyhow!("wav write sample failed: {}", e))?;
-        }
-        writer
-            .finalize()
-            .map_err(|e| anyhow::anyhow!("wav finalize failed: {}", e))?;
-    }
-    Ok(cursor.into_inner())
 }
 
 fn guess_mime(filename: &str) -> &'static str {

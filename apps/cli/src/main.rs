@@ -1,6 +1,6 @@
 use anyhow::Result;
-use futures::StreamExt;
 use std::sync::Arc;
+use tokio::io::AsyncBufReadExt;
 
 use typex_asr::AsrProvider;
 use typex_asr::mock::MockAsrProvider;
@@ -44,7 +44,7 @@ async fn main() -> Result<()> {
             println!("{}", text);
         }
     } else {
-        // Stream mode: pipeline with microphone
+        // Session mode: press Enter to start/stop recording
         let asr: Arc<dyn AsrProvider> = match config.asr.provider.as_str() {
             "mock" => Arc::new(MockAsrProvider::new()),
             "openai-compatible" | "" => create_openai_provider(&config)?,
@@ -63,31 +63,40 @@ async fn main() -> Result<()> {
         let typex = builder.build();
 
         let capture = typex_audio::MicrophoneCapture::new(config.audio.device.clone());
-        let (_stream_handle, audio) = capture.start()?;
-        let mut stream = typex.pipeline().run(audio);
 
-        let ctrl_c = tokio::signal::ctrl_c();
-        tokio::pin!(ctrl_c);
+        println!("TypeX session mode. Press Enter to start/stop recording.");
+
+        let stdin = tokio::io::BufReader::new(tokio::io::stdin());
+        let mut lines = stdin.lines();
 
         loop {
-            tokio::select! {
-                _ = &mut ctrl_c => {
-                    tracing::info!("stopping capture...");
-                    break;
-                }
-                result = stream.next() => {
-                    match result {
-                        Some(Ok(output)) => {
-                            let tag = if output.is_final { "FINAL" } else { "partial" };
-                            println!("[{}] {}", tag, output.text);
-                        }
-                        Some(Err(e)) => {
-                            tracing::error!("pipeline error: {}", e);
-                            break;
-                        }
-                        None => break,
-                    }
-                }
+            println!("\nPress Enter to start recording...");
+            lines
+                .next_line()
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("stdin closed"))?;
+
+            let recorder = capture.record_session()?;
+            println!("Recording... Press Enter to stop.");
+
+            lines
+                .next_line()
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("stdin closed"))?;
+
+            let pcm = recorder.stop().await?;
+            tracing::info!("captured {} bytes of PCM audio", pcm.len());
+
+            if pcm.is_empty() {
+                println!("(no audio captured)");
+                continue;
+            }
+
+            let result = typex.run_session(pcm).await?;
+            if result.text.is_empty() {
+                println!("(no speech detected)");
+            } else {
+                println!("{}", result.text);
             }
         }
     }
