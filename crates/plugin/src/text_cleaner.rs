@@ -13,18 +13,18 @@ impl Plugin for TextCleaner {
     }
 
     async fn process(&self, text: &str, _ctx: &PluginContext) -> Result<String> {
-        let words: Vec<&str> = text.split_whitespace().collect();
-        let mut result = String::new();
-        for (i, word) in words.iter().enumerate() {
-            if i > 0 {
-                let prev_ends_cjk = words[i - 1].ends_with(is_cjk);
-                let curr_starts_cjk = word.starts_with(is_cjk);
-                if !prev_ends_cjk || !curr_starts_cjk {
-                    result.push(' ');
-                }
-            }
+        let mut words = text.split_whitespace().peekable();
+        let mut result = String::with_capacity(text.len());
+
+        while let Some(word) = words.next() {
             result.push_str(word);
+            if let Some(next) = words.peek()
+                && (!word.ends_with(is_cjk) || !next.starts_with(is_cjk))
+            {
+                result.push(' ');
+            }
         }
+
         Ok(result)
     }
 }
@@ -37,7 +37,6 @@ fn is_cjk(ch: char) -> bool {
         | '\u{3000}'..='\u{303F}'
         | '\u{3040}'..='\u{309F}'
         | '\u{30A0}'..='\u{30FF}'
-        | '\u{AC00}'..='\u{D7AF}'
         | '\u{FF00}'..='\u{FFEF}'
     )
 }
