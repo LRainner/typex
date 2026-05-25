@@ -17,7 +17,7 @@ const BYTES_PER_SAMPLE: u16 = BITS_PER_SAMPLE / 8; // 2 bytes per sample
 /// encode as WAV, POST to `/v1/audio/transcriptions`, yield text.
 pub struct OpenAiCompatibleAsrProvider {
     endpoint: String,
-    api_key: String,
+    api_key: Option<String>,
     model: String,
     language: Option<String>,
     /// Bytes per segment. Default: 3s of 16kHz 16-bit mono.
@@ -31,7 +31,7 @@ struct TranscriptionResponse {
 }
 
 impl OpenAiCompatibleAsrProvider {
-    pub fn new(endpoint: String, api_key: String, model: String) -> Self {
+    pub fn new(endpoint: String, api_key: Option<String>, model: String) -> Self {
         Self {
             endpoint,
             api_key,
@@ -185,7 +185,7 @@ impl AsrProvider for OpenAiCompatibleAsrProvider {
 async fn transcribe_segment(
     client: &reqwest::Client,
     endpoint: &str,
-    api_key: &str,
+    api_key: &Option<String>,
     model: &str,
     language: &Option<String>,
     pcm_data: &[u8],
@@ -217,15 +217,14 @@ fn transcription_url(endpoint: &str) -> String {
 async fn post_transcription(
     client: &reqwest::Client,
     url: &str,
-    api_key: &str,
+    api_key: &Option<String>,
     form: reqwest::multipart::Form,
 ) -> Result<String> {
-    let resp = client
-        .post(url)
-        .header("Authorization", format!("Bearer {}", api_key))
-        .multipart(form)
-        .send()
-        .await?;
+    let mut req = client.post(url);
+    if let Some(key) = api_key {
+        req = req.header("Authorization", format!("Bearer {}", key));
+    }
+    let resp = req.multipart(form).send().await?;
 
     let status = resp.status();
     if !status.is_success() {
