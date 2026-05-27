@@ -36,7 +36,9 @@ async fn main() -> Result<()> {
             tracing::warn!("unknown plugin: {}", name);
         }
     }
-    builder = builder.injector(Arc::new(ClipboardInjector));
+    if input_file.is_none() {
+        builder = builder.injector(Arc::new(ClipboardInjector));
+    }
     let typex = builder.build();
 
     if let Some(path) = &input_file {
