@@ -30,7 +30,7 @@ fn simulate_paste() -> Result<()> {
     };
 
     enigo.key(modifier, Direction::Press)?;
-    enigo.key(Key::V, Direction::Click)?;
+    enigo.key(Key::Unicode('v'), Direction::Click)?;
     enigo.key(modifier, Direction::Release)?;
 
     Ok(())
