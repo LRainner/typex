@@ -35,6 +35,14 @@ impl TypeX {
     ) -> anyhow::Result<typex_pipeline::PipelineOutput> {
         self.pipeline.run_session(pcm_data).await
     }
+
+    pub async fn run_file(
+        &self,
+        file_data: Vec<u8>,
+        filename: &str,
+    ) -> anyhow::Result<typex_pipeline::PipelineOutput> {
+        self.pipeline.run_file(file_data, filename).await
+    }
 }
 
 pub struct TypeXBuilder {

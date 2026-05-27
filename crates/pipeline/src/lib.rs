@@ -88,7 +88,15 @@ impl Pipeline {
     pub async fn run_session(&self, pcm_data: Vec<u8>) -> Result<PipelineOutput> {
         let wav = typex_asr::pcm_to_wav(&pcm_data)?;
         let asr_result = self.asr.transcribe_file(wav, "audio.wav").await?;
+        self.process_text(asr_result).await
+    }
 
+    pub async fn run_file(&self, file_data: Vec<u8>, filename: &str) -> Result<PipelineOutput> {
+        let asr_result = self.asr.transcribe_file(file_data, filename).await?;
+        self.process_text(asr_result).await
+    }
+
+    async fn process_text(&self, asr_result: AsrResult) -> Result<PipelineOutput> {
         let text = apply_plugins(&asr_result.text, &asr_result, &self.plugins).await?;
 
         let final_text = match &self.llm {

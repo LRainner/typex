@@ -22,10 +22,25 @@ async fn main() -> Result<()> {
     let config = load_config()?;
     let input_file = parse_input_arg()?;
 
+    let asr: Arc<dyn AsrProvider> = match config.asr.provider.as_str() {
+        "mock" => Arc::new(MockAsrProvider::new()),
+        "openai-compatible" | "" => create_openai_provider(&config)?,
+        other => anyhow::bail!("unknown ASR provider: {}", other),
+    };
+
+    let mut builder = TypeX::builder(asr);
+    for name in &config.pipeline.plugins {
+        if let Some(plugin) = create_plugin(name) {
+            builder = builder.plugin(plugin);
+        } else {
+            tracing::warn!("unknown plugin: {}", name);
+        }
+    }
+    builder = builder.injector(Arc::new(ClipboardInjector));
+    let typex = builder.build();
+
     if let Some(path) = &input_file {
-        // File mode: send audio directly to API, then apply plugins
-        validate_file_provider(&config)?;
-        let provider = create_openai_provider(&config)?;
+        // File mode: transcribe audio file
         let file_data = tokio::fs::read(path).await?;
         let filename = std::path::Path::new(path)
             .file_name()
@@ -34,34 +49,14 @@ async fn main() -> Result<()> {
             .unwrap_or("audio.wav");
 
         tracing::info!("transcribing {} ({} bytes)", filename, file_data.len());
-        let result = provider.transcribe_file(file_data, filename).await?;
-
-        let text = apply_plugins(&result.text, &config).await;
-
-        if text.is_empty() {
+        let result = typex.run_file(file_data, filename).await?;
+        if result.text.is_empty() {
             println!("(no speech detected)");
         } else {
-            println!("{}", text);
+            println!("{}", result.text);
         }
     } else {
         // Session mode: press Enter to start/stop recording
-        let asr: Arc<dyn AsrProvider> = match config.asr.provider.as_str() {
-            "mock" => Arc::new(MockAsrProvider::new()),
-            "openai-compatible" | "" => create_openai_provider(&config)?,
-            other => anyhow::bail!("unknown ASR provider: {}", other),
-        };
-
-        let mut builder = TypeX::builder(asr);
-        for name in &config.pipeline.plugins {
-            if let Some(plugin) = create_plugin(name) {
-                builder = builder.plugin(plugin);
-            } else {
-                tracing::warn!("unknown plugin: {}", name);
-            }
-        }
-        builder = builder.injector(Arc::new(ClipboardInjector));
-        let typex = builder.build();
-
         let capture = typex_audio::MicrophoneCapture::new(config.audio.device.clone());
 
         println!("TypeX session mode. Press Enter to start/stop recording.");
@@ -104,34 +99,12 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn apply_plugins(text: &str, config: &AppConfig) -> String {
-    let ctx = typex_plugin::PluginContext { is_final: true };
-    let mut result = text.to_string();
-    for name in &config.pipeline.plugins {
-        if let Some(plugin) = create_plugin(name) {
-            match plugin.process(&result, &ctx).await {
-                Ok(processed) => result = processed,
-                Err(e) => tracing::warn!("plugin {} failed: {}", name, e),
-            }
-        }
-    }
-    result
-}
-
 fn create_plugin(name: &str) -> Option<Arc<dyn typex_plugin::Plugin>> {
     match name {
         "filler_remover" => Some(Arc::new(FillerRemover)),
         "sentence_formatter" => Some(Arc::new(SentenceFormatter)),
         "text_cleaner" => Some(Arc::new(TextCleaner)),
         _ => None,
-    }
-}
-
-fn validate_file_provider(config: &AppConfig) -> Result<()> {
-    match config.asr.provider.as_str() {
-        "openai-compatible" | "" => Ok(()),
-        "mock" => anyhow::bail!("mock provider does not support file transcription"),
-        other => anyhow::bail!("unknown ASR provider: {}", other),
     }
 }
 
