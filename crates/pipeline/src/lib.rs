@@ -65,14 +65,7 @@ impl Pipeline {
                 let text = apply_plugins(&asr_result.text, &asr_result, &plugins).await?;
 
                 if let Some(ref inj) = injector {
-                    let text_clone = text.clone();
-                    let inj_clone = inj.clone();
-                    let result = tokio::task::spawn_blocking(move || inj_clone.inject(&text_clone))
-                        .await
-                        .unwrap_or_else(|e| Err(anyhow::anyhow!("injector task failed: {}", e)));
-                    if let Err(e) = result {
-                        tracing::warn!("injector failed: {}", e);
-                    }
+                    Self::inject_text(inj.clone(), text.clone()).await;
                 }
 
                 Ok(PipelineOutput {
@@ -101,6 +94,15 @@ impl Pipeline {
         self.process_text(asr_result).await
     }
 
+    async fn inject_text(injector: Arc<dyn Injector>, text: String) {
+        let result = tokio::task::spawn_blocking(move || injector.inject(&text))
+            .await
+            .unwrap_or_else(|e| Err(anyhow::anyhow!("injector task failed: {}", e)));
+        if let Err(e) = result {
+            tracing::warn!("injector failed: {}", e);
+        }
+    }
+
     async fn process_text(&self, asr_result: AsrResult) -> Result<PipelineOutput> {
         let text = apply_plugins(&asr_result.text, &asr_result, &self.plugins).await?;
 
@@ -124,14 +126,7 @@ impl Pipeline {
         };
 
         if let Some(ref inj) = self.injector {
-            let inj_clone = inj.clone();
-            let text_clone = final_text.clone();
-            let result = tokio::task::spawn_blocking(move || inj_clone.inject(&text_clone))
-                .await
-                .unwrap_or_else(|e| Err(anyhow::anyhow!("injector task failed: {}", e)));
-            if let Err(e) = result {
-                tracing::warn!("injector failed: {}", e);
-            }
+            Self::inject_text(inj.clone(), final_text.clone()).await;
         }
 
         Ok(PipelineOutput {
