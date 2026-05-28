@@ -64,10 +64,15 @@ impl Pipeline {
 
                 let text = apply_plugins(&asr_result.text, &asr_result, &plugins).await?;
 
-                if let Some(ref inj) = injector
-                    && let Err(e) = inj.inject(&text)
-                {
-                    tracing::warn!("injector failed: {}", e);
+                if let Some(ref inj) = injector {
+                    let text_clone = text.clone();
+                    let inj_clone = inj.clone();
+                    let result = tokio::task::spawn_blocking(move || inj_clone.inject(&text_clone))
+                        .await
+                        .unwrap_or_else(|e| Err(anyhow::anyhow!("injector task failed: {}", e)));
+                    if let Err(e) = result {
+                        tracing::warn!("injector failed: {}", e);
+                    }
                 }
 
                 Ok(PipelineOutput {
@@ -118,10 +123,15 @@ impl Pipeline {
             None => text,
         };
 
-        if let Some(ref inj) = self.injector
-            && let Err(e) = inj.inject(&final_text)
-        {
-            tracing::warn!("injector failed: {}", e);
+        if let Some(ref inj) = self.injector {
+            let inj_clone = inj.clone();
+            let text_clone = final_text.clone();
+            let result = tokio::task::spawn_blocking(move || inj_clone.inject(&text_clone))
+                .await
+                .unwrap_or_else(|e| Err(anyhow::anyhow!("injector task failed: {}", e)));
+            if let Err(e) = result {
+                tracing::warn!("injector failed: {}", e);
+            }
         }
 
         Ok(PipelineOutput {
