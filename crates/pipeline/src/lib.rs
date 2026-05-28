@@ -64,7 +64,9 @@ impl Pipeline {
 
                 let text = apply_plugins(&asr_result.text, &asr_result, &plugins).await?;
 
-                if let Some(ref inj) = injector {
+                if asr_result.is_final
+                    && let Some(ref inj) = injector
+                {
                     Self::inject_text(inj.clone(), text.clone()).await;
                 }
 
@@ -95,6 +97,9 @@ impl Pipeline {
     }
 
     async fn inject_text(injector: Arc<dyn Injector>, text: String) {
+        if text.is_empty() {
+            return;
+        }
         let result = tokio::task::spawn_blocking(move || injector.inject(&text))
             .await
             .unwrap_or_else(|e| Err(anyhow::anyhow!("injector task failed: {}", e)));
