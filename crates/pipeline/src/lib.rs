@@ -58,17 +58,10 @@ impl Pipeline {
 
         let plugin_stream = asr_stream.then(move |result| {
             let plugins = plugins.clone();
-            let injector = injector.clone();
             async move {
                 let asr_result = result?;
 
                 let text = apply_plugins(&asr_result.text, &asr_result, &plugins).await?;
-
-                if asr_result.is_final
-                    && let Some(ref inj) = injector
-                {
-                    Self::inject_text(inj.clone(), text.clone()).await;
-                }
 
                 Ok(PipelineOutput {
                     text,
@@ -77,11 +70,27 @@ impl Pipeline {
             }
         });
 
-        if let Some(llm) = llm {
-            let llm_stream = Self::attach_llm(plugin_stream, llm);
-            llm_stream.boxed()
+        let final_stream = if let Some(llm) = llm {
+            Self::attach_llm(plugin_stream, llm).boxed()
         } else {
             plugin_stream.boxed()
+        };
+
+        if let Some(injector) = injector {
+            final_stream
+                .then(move |result| {
+                    let injector = injector.clone();
+                    async move {
+                        let output = result?;
+                        if output.is_final {
+                            Self::inject_text(injector, output.text.clone()).await;
+                        }
+                        Ok(output)
+                    }
+                })
+                .boxed()
+        } else {
+            final_stream
         }
     }
 
