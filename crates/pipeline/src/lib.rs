@@ -88,7 +88,9 @@ impl Pipeline {
                             let mut acc = accumulated.lock().unwrap();
                             acc.push_str(&output.text);
                             if output.is_final {
-                                Some(acc.clone())
+                                let text = acc.clone();
+                                acc.clear();
+                                Some(text)
                             } else {
                                 None
                             }
