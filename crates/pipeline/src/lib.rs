@@ -77,13 +77,24 @@ impl Pipeline {
         };
 
         if let Some(injector) = injector {
+            let accumulated = Arc::new(std::sync::Mutex::new(String::new()));
             final_stream
                 .then(move |result| {
                     let injector = injector.clone();
+                    let accumulated = accumulated.clone();
                     async move {
                         let output = result?;
-                        if output.is_final {
-                            Self::inject_text(injector, output.text.clone()).await;
+                        let text_to_inject = {
+                            let mut acc = accumulated.lock().unwrap();
+                            acc.push_str(&output.text);
+                            if output.is_final {
+                                Some(acc.clone())
+                            } else {
+                                None
+                            }
+                        };
+                        if let Some(text) = text_to_inject {
+                            Self::inject_text(injector, text).await;
                         }
                         Ok(output)
                     }
