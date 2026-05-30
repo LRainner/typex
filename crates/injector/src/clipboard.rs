@@ -2,6 +2,10 @@ use anyhow::Result;
 
 use crate::Injector;
 
+/// Delay after setting clipboard text before simulating paste,
+/// to allow the OS clipboard daemon to register the new content.
+const CLIPBOARD_SETTLE_DELAY: std::time::Duration = std::time::Duration::from_millis(100);
+
 /// Injects text by writing to the clipboard and simulating Ctrl+V / Cmd+V.
 pub struct ClipboardInjector;
 
@@ -16,7 +20,7 @@ impl Injector for ClipboardInjector {
         }
         let mut clipboard = arboard::Clipboard::new()?;
         clipboard.set_text(text)?;
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(CLIPBOARD_SETTLE_DELAY);
         simulate_paste()?;
         Ok(())
     }
