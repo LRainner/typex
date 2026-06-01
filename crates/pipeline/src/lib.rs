@@ -58,17 +58,10 @@ impl Pipeline {
 
         let plugin_stream = asr_stream.then(move |result| {
             let plugins = plugins.clone();
-            let injector = injector.clone();
             async move {
                 let asr_result = result?;
 
                 let text = apply_plugins(&asr_result.text, &asr_result, &plugins).await?;
-
-                if let Some(ref inj) = injector
-                    && let Err(e) = inj.inject(&text)
-                {
-                    tracing::warn!("injector failed: {}", e);
-                }
 
                 Ok(PipelineOutput {
                     text,
@@ -77,18 +70,67 @@ impl Pipeline {
             }
         });
 
-        if let Some(llm) = llm {
-            let llm_stream = Self::attach_llm(plugin_stream, llm);
-            llm_stream.boxed()
+        let final_stream = if let Some(llm) = llm {
+            Self::attach_llm(plugin_stream, llm).boxed()
         } else {
             plugin_stream.boxed()
+        };
+
+        if let Some(injector) = injector {
+            let accumulated = Arc::new(std::sync::Mutex::new(String::new()));
+            final_stream
+                .then(move |result| {
+                    let injector = injector.clone();
+                    let accumulated = accumulated.clone();
+                    async move {
+                        let output = result?;
+                        let text_to_inject = {
+                            let mut acc = accumulated.lock().unwrap();
+                            acc.push_str(&output.text);
+                            if output.is_final {
+                                let text = acc.clone();
+                                acc.clear();
+                                Some(text)
+                            } else {
+                                None
+                            }
+                        };
+                        if let Some(text) = text_to_inject {
+                            Self::inject_text(injector, text).await;
+                        }
+                        Ok(output)
+                    }
+                })
+                .boxed()
+        } else {
+            final_stream
         }
     }
 
     pub async fn run_session(&self, pcm_data: Vec<u8>) -> Result<PipelineOutput> {
         let wav = typex_asr::pcm_to_wav(&pcm_data)?;
         let asr_result = self.asr.transcribe_file(wav, "audio.wav").await?;
+        self.process_text(asr_result).await
+    }
 
+    pub async fn run_file(&self, file_data: Vec<u8>, filename: &str) -> Result<PipelineOutput> {
+        let asr_result = self.asr.transcribe_file(file_data, filename).await?;
+        self.process_text(asr_result).await
+    }
+
+    async fn inject_text(injector: Arc<dyn Injector>, text: String) {
+        if text.is_empty() {
+            return;
+        }
+        let result = tokio::task::spawn_blocking(move || injector.inject(&text))
+            .await
+            .unwrap_or_else(|e| Err(anyhow::anyhow!("injector task failed: {}", e)));
+        if let Err(e) = result {
+            tracing::warn!("injector failed: {}", e);
+        }
+    }
+
+    async fn process_text(&self, asr_result: AsrResult) -> Result<PipelineOutput> {
         let text = apply_plugins(&asr_result.text, &asr_result, &self.plugins).await?;
 
         let final_text = match &self.llm {
@@ -110,10 +152,8 @@ impl Pipeline {
             None => text,
         };
 
-        if let Some(ref inj) = self.injector
-            && let Err(e) = inj.inject(&final_text)
-        {
-            tracing::warn!("injector failed: {}", e);
+        if let Some(ref inj) = self.injector {
+            Self::inject_text(inj.clone(), final_text.clone()).await;
         }
 
         Ok(PipelineOutput {
