@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 cargo build                    # build entire workspace
 cargo run -p typex-cli         # run CLI (stream mode with microphone)
 cargo run -p typex-cli -- --input audio.wav   # file mode: transcribe a WAV file
-cargo build -p typex-desktop   # build desktop placeholder
+cargo build -p typex-desktop   # build Tauri desktop app
 cargo test                     # run all tests (none yet)
 cargo test -p typex-pipeline   # run tests for a single crate
 ```
@@ -27,6 +27,8 @@ microphone → capture (cpal) → resample (rubato) → 16kHz mono PCM
 - Stream mode (default): microphone capture → pipeline → real-time transcription
 - File mode (`--input`): WAV file → ASR → plugins → output text
 
+**Desktop app (`typex-desktop`):** Tauri-based GUI with an overlay window for real-time transcription display. Frontend is pure HTML/CSS/JS with i18n support (EN, zh-CN). Tauri commands bridge the Rust backend (audio capture, pipeline, config) to the frontend UI.
+
 **Key traits and types (the extension points):**
 
 | Trait / Type | Crate | Purpose |
@@ -43,7 +45,7 @@ microphone → capture (cpal) → resample (rubato) → 16kHz mono PCM
 
 **TypeX builder (`typex-core`):** Convenience wrapper that re-exports all crates and provides `TypeX::builder(asr)`.
 
-**Config (`typex-config`):** TOML-based (`config.toml`). `AppConfig` with sub-configs for asr/llm/pipeline/injector/audio. Supports serde defaults.
+**Config (`typex-config`):** TOML-based (`config.toml`). `AppConfig` with sub-configs for asr/llm/pipeline/injector/audio/history/shortcut/overlay. Supports serde defaults and `save()` for persisting changes.
 
 ## Adding a Provider
 

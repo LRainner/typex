@@ -1,0 +1,1524 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TypeX</title>
+  <style>
+    :root {
+      --font: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+      --font-mono: "Cascadia Code", "Fira Code", "Consolas", monospace;
+      --radius: 8px;
+      --radius-sm: 5px;
+    }
+
+    /* Light theme */
+    :root {
+      --bg: #ffffff;
+      --surface: #f7f7f8;
+      --surface-hover: #ededee;
+      --border: #e4e4e7;
+      --text: #1a1a1e;
+      --text-secondary: #6b6b76;
+      --text-muted: #a1a1aa;
+      --accent: #10b981;
+      --accent-hover: #059669;
+      --danger: #ef4444;
+      --titlebar-bg: #f7f7f8;
+      --titlebar-btn-hover: #e4e4e7;
+      --titlebar-close-hover: #ef4444;
+      --titlebar-close-text: #ffffff;
+      --input-bg: #ffffff;
+      --input-border: #d4d4d8;
+      --input-focus: #10b981;
+      --toggle-bg: #d4d4d8;
+      --toggle-active: #10b981;
+      --toggle-knob: #ffffff;
+      --shadow: 0 1px 3px rgba(0,0,0,0.06);
+      --sidebar-bg: #f0f0f2;
+      --sidebar-active: #e4e4e7;
+      --empty-icon: #d4d4d8;
+    }
+
+    /* Dark theme */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f0f13;
+        --surface: #1a1a22;
+        --surface-hover: #24242e;
+        --border: #2a2a36;
+        --text: #e4e4ec;
+        --text-secondary: #9494a8;
+        --text-muted: #5c5c70;
+        --accent: #34d399;
+        --accent-hover: #6ee7b7;
+        --danger: #f87171;
+        --titlebar-bg: #1a1a22;
+        --titlebar-btn-hover: #2a2a36;
+        --titlebar-close-hover: #dc2626;
+        --titlebar-close-text: #ffffff;
+        --input-bg: #0f0f13;
+        --input-border: #2a2a36;
+        --input-focus: #34d399;
+        --toggle-bg: #2a2a36;
+        --toggle-active: #34d399;
+        --toggle-knob: #e4e4ec;
+        --shadow: 0 1px 3px rgba(0,0,0,0.3);
+        --sidebar-bg: #141418;
+        --sidebar-active: #2a2a36;
+        --empty-icon: #2a2a36;
+      }
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    .app { display: flex; flex-direction: column; height: 100vh; }
+
+    /* ── Title Bar ── */
+    .titlebar {
+      display: flex;
+      align-items: center;
+      height: 36px;
+      padding-left: 14px;
+      background: var(--titlebar-bg);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .titlebar-drag {
+      flex: 1;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      -webkit-app-region: drag;
+    }
+    .titlebar-title {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+    }
+    .titlebar-controls {
+      display: flex;
+      height: 100%;
+      -webkit-app-region: no-drag;
+    }
+    .titlebar-btn {
+      width: 46px;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .titlebar-btn:hover { background: var(--titlebar-btn-hover); }
+    .titlebar-btn.close:hover { background: var(--titlebar-close-hover); color: var(--titlebar-close-text); }
+    .titlebar-btn svg { width: 10px; height: 10px; }
+
+    /* ── Main Layout ── */
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 100px;
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding-top: 8px;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+    .sidebar-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: none;
+      border: none;
+      border-radius: 0;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .sidebar-btn:hover { background: var(--sidebar-active); color: var(--text-secondary); }
+    .sidebar-btn.active { background: var(--sidebar-active); color: var(--accent); }
+    .sidebar-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+    .sidebar-btn-label {
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    /* ── Content ── */
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 18px 18px;
+    }
+
+    /* ── Section ── */
+    .section {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    /* ── Form ── */
+    .field { margin-bottom: 8px; }
+    .field:last-child { margin-bottom: 0; }
+    .field-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 3px;
+    }
+    input, select {
+      width: 100%;
+      padding: 6px 8px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text);
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: var(--radius-sm);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus { border-color: var(--input-focus); }
+    input::placeholder { color: var(--text-muted); }
+    select {
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239494a8' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      padding-right: 24px;
+    }
+    select option { background: var(--surface); color: var(--text); }
+
+    /* ── Toggle ── */
+    .toggle-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+    .toggle-row + .toggle-row { border-top: 1px solid var(--border); }
+    .toggle { position: relative; width: 30px; height: 16px; cursor: pointer; flex-shrink: 0; }
+    .toggle input { position: absolute; opacity: 0; width: 30px; height: 16px; cursor: pointer; margin: 0; padding: 0; }
+    .toggle .slider { position: absolute; inset: 0; background: var(--toggle-bg); border-radius: 8px; transition: background 0.2s; }
+    .toggle .slider::after {
+      content: '';
+      position: absolute;
+      width: 12px; height: 12px; left: 2px; top: 2px;
+      background: var(--toggle-knob);
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+    .toggle input:checked + .slider { background: var(--toggle-active); }
+    .toggle input:checked + .slider::after { transform: translateX(14px); }
+    .toggle-label { font-family: var(--font-mono); font-size: 11px; color: var(--text); }
+
+    /* ── History ── */
+    .history-toolbar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .history-search {
+      flex: 1;
+      padding: 6px 8px 6px 28px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text);
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: var(--radius-sm);
+      outline: none;
+      transition: border-color 0.2s;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none'%3E%3Ccircle cx='6' cy='6' r='5' stroke='%23a1a1aa' stroke-width='1.5'/%3E%3Cline x1='10' y1='10' x2='13' y2='13' stroke='%23a1a1aa' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: 8px center;
+      background-size: 14px;
+    }
+    .history-search:focus { border-color: var(--input-focus); }
+    .history-search::placeholder { color: var(--text-muted); }
+    .history-select-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      margin-bottom: 4px;
+    }
+    .select-count {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+    .history-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+    .history-empty svg { width: 48px; height: 48px; color: var(--empty-icon); margin-bottom: 12px; }
+    .history-empty p { font-size: 12px; }
+    .history-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .history-item:last-child { border-bottom: none; }
+    .history-item:hover { background: var(--surface-hover); margin: 0 -14px; padding: 10px 14px; border-radius: var(--radius-sm); }
+    .history-item.selected { background: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+    .history-item.selected:hover { background: color-mix(in srgb, var(--accent) 15%, var(--surface-hover)); }
+    .history-item-checkbox {
+      width: 16px; height: 16px;
+      accent-color: var(--accent);
+      cursor: pointer;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .history-item-checkbox.hidden { display: none; }
+    .history-item-content { flex: 1; min-width: 0; }
+    .history-item-pinned {
+      font-size: 10px;
+      color: var(--accent);
+      margin-bottom: 2px;
+    }
+    .history-time {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 3px;
+    }
+    .history-text {
+      font-size: 12px;
+      color: var(--text);
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .history-text.truncated {
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    .history-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding-top: 8px;
+    }
+    .btn-action {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 4px 10px;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .btn-action:hover { border-color: var(--text-secondary); color: var(--text-secondary); }
+    .btn-action.danger:hover { border-color: var(--danger); color: var(--danger); }
+    .btn-clear {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 4px 10px;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .btn-clear:hover { border-color: var(--danger); color: var(--danger); }
+
+    /* ── Delete Modal ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+    }
+    .modal {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      max-width: 340px;
+      width: 90%;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    }
+    .modal-title {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--danger);
+      margin-bottom: 10px;
+    }
+    .modal-body {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 14px;
+    }
+    .modal-preview-item {
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 2px 0;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 1;
+      -webkit-box-orient: vertical;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .btn-cancel-modal {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 5px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .btn-cancel-modal:hover { background: var(--surface-hover); }
+    .btn-danger {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 5px 12px;
+      background: var(--danger);
+      border: none;
+      border-radius: var(--radius-sm);
+      color: #fff;
+      cursor: pointer;
+    }
+    .btn-danger:hover { opacity: 0.9; }
+
+    /* ── Recording Indicator ── */
+    .recording-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--danger);
+      color: #fff;
+      border-radius: var(--radius);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      margin-bottom: 10px;
+    }
+    .recording-dot {
+      width: 8px; height: 8px;
+      background: #fff;
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* ── Shortcut Input ── */
+    .shortcut-recorder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 12px;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text);
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      user-select: none;
+      min-height: 32px;
+    }
+    .shortcut-recorder:hover { border-color: var(--text-muted); }
+    .shortcut-recorder.listening {
+      border-color: var(--accent);
+      background: var(--surface);
+      color: var(--text-secondary);
+    }
+    .shortcut-recorder.conflict {
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+    .shortcut-hint {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    .shortcut-hint.error { color: var(--danger); }
+    .shortcut-hint.success { color: var(--accent); }
+
+    /* ── Footer ── */
+    .footer {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 4px 0 2px;
+    }
+
+    /* Scrollbar */
+    .content::-webkit-scrollbar { width: 4px; }
+    .content::-webkit-scrollbar-track { background: transparent; }
+    .content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .content::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+    /* Views */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* ── Record View ── */
+    .record-center {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px 20px;
+      gap: 12px;
+    }
+    .record-btn {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s, transform 0.15s, opacity 0.2s;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .record-btn:hover { transform: scale(1.05); }
+    .record-btn:active { transform: scale(0.96); }
+    .record-btn.recording {
+      background: var(--danger);
+      animation: pulse-btn 1.5s infinite;
+    }
+    .record-btn.transcribing {
+      background: var(--text-muted);
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .record-btn-icon { width: 36px; height: 36px; }
+    @keyframes pulse-btn {
+      0%, 100% { box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+      50% { box-shadow: 0 0 0 8px rgba(239,68,68,0.2); }
+    }
+    .record-status {
+      font-size: 12px;
+      color: var(--text-secondary);
+      text-align: center;
+    }
+    .record-status.recording-state { color: var(--danger); }
+    .record-status.transcribing-state { color: var(--text-muted); }
+    .record-timer {
+      font-family: var(--font-mono);
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--accent);
+    }
+    .record-level-section {
+      padding: 0 20px 10px;
+    }
+    .record-level-bar {
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .record-level-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      transition: width 0.05s linear;
+      width: 0%;
+    }
+    .record-device-section {
+      padding: 0 20px 10px;
+    }
+
+    /* ── About View ── */
+    .about-header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 0 12px;
+      gap: 4px;
+    }
+    .about-version {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .about-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+      font-size: 12px;
+    }
+    .about-row + .about-row { border-top: 1px solid var(--border); }
+    .about-label { color: var(--text-secondary); }
+    .about-value { color: var(--text); font-family: var(--font-mono); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Title Bar -->
+    <div class="titlebar">
+      <div class="titlebar-drag">
+        <span class="titlebar-title">TypeX</span>
+      </div>
+      <div class="titlebar-controls">
+        <button class="titlebar-btn" id="btn-minimize" title="Minimize">
+          <svg viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg>
+        </button>
+        <button class="titlebar-btn close" id="btn-close" title="Close">
+          <svg viewBox="0 0 10 10">
+            <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.2" fill="none"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Main: Sidebar + Content -->
+    <div class="main">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <button class="sidebar-btn active" id="nav-history">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/>
+          </svg>
+          <span class="sidebar-btn-label" data-i18n="nav.history"></span>
+        </button>
+        <button class="sidebar-btn" id="nav-record">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+          <span class="sidebar-btn-label" data-i18n="nav.record"></span>
+        </button>
+        <button class="sidebar-btn" id="nav-settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <span class="sidebar-btn-label" data-i18n="nav.settings"></span>
+        </button>
+        <button class="sidebar-btn" id="nav-about">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <span class="sidebar-btn-label" data-i18n="nav.about"></span>
+        </button>
+      </div>
+
+      <!-- Content -->
+      <div class="content">
+        <!-- History View -->
+        <div class="view active" id="view-history">
+          <div class="recording-indicator" id="recording-indicator" style="display:none;">
+            <span class="recording-dot"></span>
+            <span data-i18n="common.recording"></span>
+          </div>
+
+          <!-- Search -->
+          <div class="history-toolbar">
+            <input class="history-search" id="history-search" type="text" data-i18n-placeholder="history.search_placeholder" />
+          </div>
+
+          <!-- Select mode bar (hidden until select mode) -->
+          <div class="history-select-bar" id="history-select-bar" style="display:none;">
+            <span class="select-count" id="select-count"></span>
+            <button class="btn-action danger" id="btn-delete-selected" data-i18n="history.delete_selected"></button>
+            <button class="btn-action" id="btn-cancel-select" data-i18n="history.cancel_select"></button>
+          </div>
+
+          <div id="history-list"></div>
+          <div class="history-empty" id="history-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/>
+            </svg>
+            <p data-i18n="history.empty"></p>
+          </div>
+          <div class="history-footer" id="history-footer" style="display:none;">
+            <button class="btn-action" id="btn-select-mode" data-i18n="history.select"></button>
+            <button class="btn-clear" id="btn-clear-history" data-i18n="history.clear_all"></button>
+          </div>
+        </div>
+
+        <!-- Record View -->
+        <div class="view" id="view-record">
+          <div class="record-center">
+            <button class="record-btn" id="record-btn">
+              <svg class="record-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            </button>
+            <div class="record-status" id="record-status" data-i18n="record.idle"></div>
+            <div class="record-timer" id="record-timer" style="display:none;">00:00</div>
+          </div>
+
+          <!-- Audio level bar -->
+          <div class="record-level-section" id="record-level-section" style="display:none;">
+            <div class="record-level-bar">
+              <div class="record-level-fill" id="record-level-fill"></div>
+            </div>
+          </div>
+
+          <!-- Audio device dropdown -->
+          <div class="record-device-section">
+            <div class="field-label" data-i18n="settings.audio_device"></div>
+            <select id="record-audio-device">
+              <!-- populated dynamically -->
+            </select>
+          </div>
+        </div>
+
+        <!-- Settings View -->
+        <div class="view" id="view-settings">
+          <!-- Shortcut -->
+          <div class="section">
+            <div class="section-title" data-i18n="settings.shortcut"></div>
+            <div class="field">
+              <div class="field-label" data-i18n="settings.shortcut_record"></div>
+              <div class="shortcut-recorder" id="shortcut-recorder" tabindex="0">Ctrl+Alt+Space</div>
+              <div class="shortcut-hint" id="shortcut-hint" data-i18n="settings.shortcut_hint"></div>
+            </div>
+          </div>
+
+          <!-- ASR -->
+          <div class="section">
+            <div class="section-title" data-i18n="settings.asr"></div>
+            <div class="field">
+              <div class="field-label" data-i18n="settings.asr_provider"></div>
+              <select id="asr-provider">
+                <option value="openai-compatible">OpenAI Compatible</option>
+                <option value="mock">Mock</option>
+              </select>
+            </div>
+            <div class="field">
+              <div class="field-label" data-i18n="settings.asr_endpoint"></div>
+              <input id="asr-endpoint" value="https://api.openai.com/v1" />
+            </div>
+            <div class="field">
+              <div class="field-label" data-i18n="settings.asr_api_key"></div>
+              <input id="asr-api-key" type="password" placeholder="sk-..." />
+            </div>
+            <div class="field">
+              <div class="field-label" data-i18n="settings.asr_model"></div>
+              <input id="asr-model" value="whisper-1" />
+            </div>
+            <div class="field">
+              <div class="field-label" data-i18n="settings.asr_language"></div>
+              <input id="asr-language" placeholder="en, zh, ja..." />
+            </div>
+          </div>
+
+          <!-- LLM (conditional — details hidden when disabled) -->
+          <div class="section">
+            <div class="section-title" data-i18n="settings.llm"></div>
+            <div class="toggle-row">
+              <label class="toggle">
+                <input type="checkbox" id="llm-enabled" />
+                <span class="slider"></span>
+              </label>
+              <span class="toggle-label" data-i18n="settings.llm_enabled"></span>
+            </div>
+            <div id="llm-details" style="display:none;">
+              <div class="field">
+                <div class="field-label" data-i18n="settings.llm_provider"></div>
+                <select id="llm-provider">
+                  <option value="mock">Mock</option>
+                </select>
+              </div>
+              <div class="field">
+                <div class="field-label" data-i18n="settings.llm_endpoint"></div>
+                <input id="llm-endpoint" placeholder="http://..." />
+              </div>
+              <div class="field">
+                <div class="field-label" data-i18n="settings.llm_api_key"></div>
+                <input id="llm-api-key" type="password" placeholder="sk-..." />
+              </div>
+              <div class="field">
+                <div class="field-label" data-i18n="settings.llm_model"></div>
+                <input id="llm-model" placeholder="gpt-4o-mini" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Plugins + Injector + Performance -->
+          <div class="section">
+            <div class="section-title" data-i18n="settings.plugins"></div>
+            <div class="toggle-row">
+              <label class="toggle">
+                <input type="checkbox" id="plugin-filler" checked />
+                <span class="slider"></span>
+              </label>
+              <span class="toggle-label">filler_remover</span>
+            </div>
+            <div class="toggle-row">
+              <label class="toggle">
+                <input type="checkbox" id="plugin-sentence" checked />
+                <span class="slider"></span>
+              </label>
+              <span class="toggle-label">sentence_formatter</span>
+            </div>
+            <div class="toggle-row">
+              <label class="toggle">
+                <input type="checkbox" id="plugin-cleaner" checked />
+                <span class="slider"></span>
+              </label>
+              <span class="toggle-label">text_cleaner</span>
+            </div>
+            <hr style="border:none;border-top:1px solid var(--border);margin:8px 0;" />
+            <div class="field">
+              <div class="field-label" data-i18n="settings.injector"></div>
+              <select id="injector-method">
+                <option value="clipboard">clipboard</option>
+                <option value="platform">platform</option>
+              </select>
+            </div>
+            <div class="field">
+              <div class="field-label" data-i18n="settings.performance"></div>
+              <select id="pipeline-performance">
+                <option value="low">low</option>
+                <option value="balanced">balanced</option>
+                <option value="high">high</option>
+              </select>
+              <div class="shortcut-hint" data-i18n="settings.performance_note" style="color:var(--text-muted);margin-top:3px;"></div>
+            </div>
+          </div>
+
+          <!-- Audio Device -->
+          <div class="section">
+            <div class="section-title" data-i18n="settings.audio_device"></div>
+            <div class="field">
+              <div class="field-label" data-i18n="settings.audio_device"></div>
+              <select id="audio-device">
+                <!-- populated dynamically from list_audio_devices -->
+              </select>
+            </div>
+          </div>
+
+          <!-- History -->
+          <div class="section">
+            <div class="section-title" data-i18n="settings.history"></div>
+            <div class="field">
+              <div class="field-label" data-i18n="settings.history_limit"></div>
+              <input id="history-log-limit" type="number" min="0" value="0" />
+            </div>
+          </div>
+
+          <!-- Language (UI) -->
+          <div class="section">
+            <div class="section-title" data-i18n="settings.language"></div>
+            <div class="field">
+              <div class="field-label" data-i18n="settings.language"></div>
+              <select id="ui-language">
+                <option value="auto">auto</option>
+                <option value="zh-CN">zh-CN</option>
+                <option value="en">en</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="footer">BSL-1.1 · Non-commercial use</div>
+        </div>
+
+        <!-- About View -->
+        <div class="view" id="view-about">
+          <div class="about-header">
+            <span class="titlebar-title" style="font-size:16px;">TypeX</span>
+            <span class="about-version" id="about-version">v0.1.0</span>
+          </div>
+          <div class="section">
+            <div class="section-title" data-i18n="about.asr_status"></div>
+            <div class="about-row">
+              <span class="about-label" data-i18n="settings.asr_provider"></span>
+              <span class="about-value" id="about-asr-provider">—</span>
+            </div>
+            <div class="about-row">
+              <span class="about-label" data-i18n="settings.asr_model"></span>
+              <span class="about-value" id="about-asr-model">—</span>
+            </div>
+            <div class="about-row">
+              <span class="about-label" data-i18n="about.audio_device"></span>
+              <span class="about-value" id="about-audio-device">—</span>
+            </div>
+            <div class="about-row">
+              <span class="about-label" data-i18n="about.injector"></span>
+              <span class="about-value" id="about-injector">—</span>
+            </div>
+            <div class="about-row">
+              <span class="about-label" data-i18n="about.plugins"></span>
+              <span class="about-value" id="about-plugins">—</span>
+            </div>
+          </div>
+          <div class="footer">BSL-1.1 · Non-commercial use</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div class="modal-overlay" id="delete-modal" style="display:none;">
+    <div class="modal">
+      <div class="modal-title" id="delete-modal-title" data-i18n="history.confirm_delete_title"></div>
+      <div class="modal-body" id="delete-modal-body"></div>
+      <div class="modal-footer">
+        <button class="btn-cancel-modal" id="delete-modal-cancel" data-i18n="history.confirm_cancel"></button>
+        <button class="btn-danger" id="delete-modal-confirm" data-i18n="history.confirm_delete"></button>
+      </div>
+    </div>
+  </div>
+
+  <script src="i18n.js"></script>
+  <script>
+    const invoke = window.__TAURI_INTERNALS__.invoke.bind(window.__TAURI_INTERNALS__);
+
+    // ── Window controls ──
+    document.getElementById('btn-minimize').addEventListener('click', () => invoke('minimize'));
+    document.getElementById('btn-close').addEventListener('click', () => invoke('close_window'));
+
+    // ── Sidebar navigation ──
+    const navBtns = ['nav-history', 'nav-record', 'nav-settings', 'nav-about'];
+    const viewIds = ['view-history', 'view-record', 'view-settings', 'view-about'];
+
+    function switchView(view) {
+      const idx = viewIds.indexOf('view-' + view);
+      navBtns.forEach((id, i) => {
+        document.getElementById(id).classList.toggle('active', i === idx);
+      });
+      viewIds.forEach((id, i) => {
+        document.getElementById(id).classList.toggle('active', i === idx);
+      });
+      // Refresh data when switching to these views
+      if (view === 'history') loadHistory();
+      if (view === 'about') loadSystemInfo();
+    }
+
+    navBtns.forEach((id, i) => {
+      const viewName = viewIds[i].replace('view-', '');
+      document.getElementById(id).addEventListener('click', () => switchView(viewName));
+    });
+
+    // ── Shortcut Recorder (declared before loadConfig uses it) ──
+    const shortcutRecorder = document.getElementById('shortcut-recorder');
+    const shortcutHint = document.getElementById('shortcut-hint');
+    let shortcutListening = false;
+
+    // ── Config ──
+    let currentConfig = null;
+
+    // ── LLM toggle visibility ──
+    const llmEnabledCheckbox = document.getElementById('llm-enabled');
+    const llmDetails = document.getElementById('llm-details');
+
+    function updateLlmVisibility() {
+      llmDetails.style.display = llmEnabledCheckbox.checked ? 'block' : 'none';
+    }
+
+    llmEnabledCheckbox.addEventListener('change', () => {
+      updateLlmVisibility();
+      saveConfig();
+    });
+
+    async function loadConfig() {
+      currentConfig = await invoke('get_config');
+
+      document.getElementById('asr-provider').value = currentConfig.asr.provider;
+      document.getElementById('asr-endpoint').value = currentConfig.asr.endpoint || '';
+      document.getElementById('asr-api-key').value = currentConfig.asr.api_key || '';
+      document.getElementById('asr-model').value = currentConfig.asr.model || '';
+      document.getElementById('asr-language').value = currentConfig.asr.language || '';
+
+      llmEnabledCheckbox.checked = currentConfig.llm.enabled;
+      document.getElementById('llm-provider').value = currentConfig.llm.provider || 'mock';
+      document.getElementById('llm-endpoint').value = currentConfig.llm.endpoint || '';
+      document.getElementById('llm-api-key').value = currentConfig.llm.api_key || '';
+      document.getElementById('llm-model').value = currentConfig.llm.model || '';
+      updateLlmVisibility();
+
+      const plugins = currentConfig.pipeline.plugins || [];
+      document.getElementById('plugin-filler').checked = plugins.includes('filler_remover');
+      document.getElementById('plugin-sentence').checked = plugins.includes('sentence_formatter');
+      document.getElementById('plugin-cleaner').checked = plugins.includes('text_cleaner');
+
+      document.getElementById('injector-method').value = currentConfig.injector.method || 'clipboard';
+      document.getElementById('pipeline-performance').value = currentConfig.pipeline.performance || 'balanced';
+
+      document.getElementById('history-log-limit').value = currentConfig.history.log_limit;
+
+      // Audio device dropdown
+      const audioSelect = document.getElementById('audio-device');
+      try {
+        const devices = await invoke('list_audio_devices');
+        audioSelect.innerHTML = '<option value="">default</option>';
+        devices.forEach(name => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          if (name === (currentConfig.audio.device || '')) opt.selected = true;
+          audioSelect.appendChild(opt);
+        });
+      } catch { audioSelect.innerHTML = '<option value="">default</option>'; }
+
+      // Language dropdown
+      document.getElementById('ui-language').value = currentConfig.ui.language || 'auto';
+
+      if (!shortcutListening) {
+        shortcutRecorder.textContent = currentConfig.shortcut.record;
+      }
+
+      // Apply i18n to all data-i18n elements after config loads
+      typexI18n.applyAll();
+    }
+
+    async function saveConfig() {
+      if (!currentConfig) return;
+
+      currentConfig.asr.provider = document.getElementById('asr-provider').value;
+      currentConfig.asr.endpoint = document.getElementById('asr-endpoint').value || null;
+      currentConfig.asr.api_key = document.getElementById('asr-api-key').value || null;
+      currentConfig.asr.model = document.getElementById('asr-model').value || null;
+      currentConfig.asr.language = document.getElementById('asr-language').value || null;
+
+      currentConfig.llm.enabled = llmEnabledCheckbox.checked;
+      currentConfig.llm.provider = document.getElementById('llm-provider').value || 'mock';
+      currentConfig.llm.endpoint = document.getElementById('llm-endpoint').value || null;
+      currentConfig.llm.api_key = document.getElementById('llm-api-key').value || null;
+      currentConfig.llm.model = document.getElementById('llm-model').value || null;
+
+      const plugins = [];
+      if (document.getElementById('plugin-filler').checked) plugins.push('filler_remover');
+      if (document.getElementById('plugin-sentence').checked) plugins.push('sentence_formatter');
+      if (document.getElementById('plugin-cleaner').checked) plugins.push('text_cleaner');
+      currentConfig.pipeline.plugins = plugins;
+      currentConfig.pipeline.performance = document.getElementById('pipeline-performance').value || 'balanced';
+
+      currentConfig.injector.method = document.getElementById('injector-method').value || 'clipboard';
+      currentConfig.audio.device = document.getElementById('audio-device').value || null;
+      currentConfig.history.log_limit = parseInt(document.getElementById('history-log-limit').value) || 0;
+
+      // Language is handled separately by set_language, don't include it in saveConfig
+
+      try {
+        await invoke('save_config', { config: currentConfig });
+      } catch (e) {
+        console.error('Failed to save config:', e);
+      }
+    }
+
+    // ── Language change handler (separate from saveConfig) ──
+    document.getElementById('ui-language').addEventListener('change', async () => {
+      const newLang = document.getElementById('ui-language').value;
+      try {
+        await invoke('set_language', { language: newLang });
+        const lang = newLang === 'auto' ? undefined : newLang;
+        await typexI18n.init(lang);
+        // loadConfig will also call applyAll, but we want immediate UI refresh
+        if (currentConfig) currentConfig.ui.language = newLang;
+      } catch (e) {
+        console.error('Failed to set language:', e);
+      }
+    });
+
+    document.querySelectorAll('#view-settings input, #view-settings select').forEach(el => {
+      // Skip language dropdown — handled separately
+      if (el.id === 'ui-language') return;
+      el.addEventListener('change', () => {
+        // Sync audio device dropdowns between settings and recording views
+        if (el.id === 'audio-device') {
+          document.getElementById('record-audio-device').value = el.value;
+        }
+        saveConfig();
+      });
+    });
+
+    // ── About page ──
+    async function loadSystemInfo() {
+      try {
+        const info = await invoke('get_system_info');
+        document.getElementById('about-version').textContent = `v${info.version}`;
+        document.getElementById('about-asr-provider').textContent = info.asr_provider;
+        document.getElementById('about-asr-model').textContent = info.asr_model || '—';
+        document.getElementById('about-audio-device').textContent = info.audio_device;
+        document.getElementById('about-injector').textContent = info.injector_method;
+        document.getElementById('about-plugins').textContent = info.plugin_count;
+      } catch (e) {
+        console.error('Failed to load system info:', e);
+      }
+    }
+
+    // ── History ──
+    let selectMode = false;
+    let selectedIds = new Set();
+    let searchQuery = '';
+    let renderedEntries = [];
+    let searchDebounceTimer = null;
+
+    function formatTime(iso) {
+      try {
+        const d = new Date(iso);
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      } catch { return iso; }
+    }
+
+    function truncateText(text, maxLen) {
+      if (text.length <= maxLen) return text;
+      return text.substring(0, maxLen) + '...';
+    }
+
+    function renderHistory(entries) {
+      renderedEntries = entries;
+      const list = document.getElementById('history-list');
+      const empty = document.getElementById('history-empty');
+      const footer = document.getElementById('history-footer');
+      const selectBar = document.getElementById('history-select-bar');
+
+      list.innerHTML = '';
+      empty.style.display = entries.length ? 'none' : 'flex';
+      footer.style.display = entries.length ? 'flex' : 'none';
+
+      entries.forEach(entry => {
+        const item = document.createElement('div');
+        item.className = 'history-item';
+        if (selectedIds.has(entry.id)) item.classList.add('selected');
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'history-item-checkbox' + (selectMode ? '' : ' hidden');
+        checkbox.checked = selectedIds.has(entry.id);
+        checkbox.dataset.entryId = entry.id;
+        checkbox.addEventListener('change', () => {
+          if (checkbox.checked) selectedIds.add(entry.id);
+          else selectedIds.delete(entry.id);
+          item.classList.toggle('selected', checkbox.checked);
+          updateSelectBar();
+        });
+
+        const content = document.createElement('div');
+        content.className = 'history-item-content';
+        content.innerHTML = `
+          ${entry.pinned ? '<div class="history-item-pinned">📌</div>' : ''}
+          <div class="history-time">${formatTime(entry.created_at)}</div>
+          <div class="history-text truncated">${escapeHtml(entry.text)}</div>
+        `;
+        const textEl = content.querySelector('.history-text');
+        content.addEventListener('click', (e) => {
+          if (e.target === checkbox) return;
+          textEl.classList.toggle('truncated');
+        });
+
+        item.appendChild(checkbox);
+        item.appendChild(content);
+        list.appendChild(item);
+      });
+
+      updateSelectBar();
+    }
+
+    function updateSelectBar() {
+      const selectBar = document.getElementById('history-select-bar');
+      const countEl = document.getElementById('select-count');
+      selectBar.style.display = selectMode ? 'flex' : 'none';
+      if (selectMode) {
+        const msg = typexI18n.t('history.selected_count').replace('{0}', selectedIds.size);
+        countEl.textContent = msg;
+      }
+    }
+
+    function enterSelectMode() {
+      selectMode = true;
+      selectedIds.clear();
+      renderHistory(renderedEntries);
+    }
+
+    function exitSelectMode() {
+      selectMode = false;
+      selectedIds.clear();
+      renderHistory(renderedEntries);
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    let historySeq = 0;
+    async function loadHistory() {
+      const seq = ++historySeq;
+      if (searchQuery) {
+        const entries = await invoke('search_history', { query: searchQuery });
+        if (seq !== historySeq) return;
+        renderHistory(entries);
+      } else {
+        const entries = await invoke('get_history');
+        if (seq !== historySeq) return;
+        renderHistory(entries);
+      }
+    }
+
+    // ── Search ──
+    const historySearch = document.getElementById('history-search');
+    historySearch.addEventListener('input', () => {
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        searchQuery = historySearch.value.trim();
+        if (selectMode) exitSelectMode();
+        loadHistory();
+      }, 300);
+    });
+
+    // ── Delete confirmation modal ──
+    let pendingDeleteAction = null; // 'selected' | 'all'
+
+    function showDeleteModal(type) {
+      pendingDeleteAction = type;
+      const modal = document.getElementById('delete-modal');
+      const title = document.getElementById('delete-modal-title');
+      const body = document.getElementById('delete-modal-body');
+
+      title.textContent = typexI18n.t('history.confirm_delete_title');
+
+      if (type === 'all') {
+        body.innerHTML = `<p>${typexI18n.t('history.confirm_delete_all')}</p>`;
+      } else {
+        const ids = [...selectedIds];
+        const previewEntries = renderedEntries.filter(e => ids.includes(e.id));
+        let html = `<p>${typexI18n.t('history.confirm_delete_selected').replace('{0}', ids.length)}</p>`;
+        const maxPreview = 3;
+        previewEntries.slice(0, maxPreview).forEach(e => {
+          html += `<div class="modal-preview-item">• ${escapeHtml(truncateText(e.text, 60))}</div>`;
+        });
+        if (previewEntries.length > maxPreview) {
+          html += `<div class="modal-preview-item">${typexI18n.t('history.confirm_delete_more').replace('{0}', previewEntries.length - maxPreview)}</div>`;
+        }
+        body.innerHTML = html;
+      }
+
+      document.getElementById('delete-modal-confirm').textContent = typexI18n.t('history.confirm_delete');
+      document.getElementById('delete-modal-cancel').textContent = typexI18n.t('history.confirm_cancel');
+      modal.style.display = 'flex';
+    }
+
+    function hideDeleteModal() {
+      document.getElementById('delete-modal').style.display = 'none';
+      pendingDeleteAction = null;
+    }
+
+    document.getElementById('delete-modal-cancel').addEventListener('click', hideDeleteModal);
+    document.getElementById('delete-modal-confirm').addEventListener('click', async () => {
+      if (pendingDeleteAction === 'all') {
+        await invoke('clear_history');
+      } else if (pendingDeleteAction === 'selected') {
+        await invoke('delete_history_entries', { ids: [...selectedIds] });
+      }
+      hideDeleteModal();
+      exitSelectMode();
+      loadHistory();
+    });
+
+    // ── Footer actions ──
+    document.getElementById('btn-select-mode').addEventListener('click', () => {
+      if (selectMode) exitSelectMode();
+      else enterSelectMode();
+    });
+
+    document.getElementById('btn-delete-selected').addEventListener('click', () => {
+      if (selectedIds.size === 0) return;
+      showDeleteModal('selected');
+    });
+
+    document.getElementById('btn-cancel-select').addEventListener('click', exitSelectMode);
+
+    document.getElementById('btn-clear-history').addEventListener('click', () => {
+      showDeleteModal('all');
+    });
+
+    // ── Init ──
+    (async () => {
+      // Initialize i18n before loading UI
+      const config = await invoke('get_config');
+      const lang = config.ui.language === 'auto'
+        ? undefined  // let detectSystemLang() decide
+        : config.ui.language;
+      await typexI18n.init(lang);
+
+      await loadConfig();
+      loadHistory();
+      loadRecordDevices();
+    })();
+
+    // ── Shortcut Recorder Logic ──
+
+    // JS event.code → global-hotkey Code name mapping
+    // global-hotkey uses: KeyA..KeyZ, Digit0..Digit9, Space, F1..F12, etc.
+    // JS event.code uses the exact same names, so we can pass it directly
+    // with minor normalization.
+    function normalizeKeyCode(code) {
+      // JS uses "KeyA" etc which matches global-hotkey format
+      // Arrow keys: JS "ArrowDown" → global-hotkey "ArrowDown"
+      // Numpad: JS "Numpad0" → global-hotkey "Numpad0"
+      return code;
+    }
+
+    function formatShortcut(modifiers, key) {
+      const parts = [];
+      if (modifiers.ctrl) parts.push('Ctrl');
+      if (modifiers.alt) parts.push('Alt');
+      if (modifiers.shift) parts.push('Shift');
+      if (modifiers.meta) parts.push('Super');
+      if (key) parts.push(key);
+      return parts.join('+');
+    }
+
+    shortcutRecorder.addEventListener('click', () => {
+      shortcutListening = true;
+      shortcutRecorder.textContent = 'Press shortcut...';
+      shortcutRecorder.classList.add('listening');
+      shortcutRecorder.classList.remove('conflict');
+      shortcutHint.textContent = '';
+      shortcutHint.classList.remove('error', 'success');
+      shortcutRecorder.focus();
+    });
+
+    // Listen for keydown on the recorder element while in listening mode
+    shortcutRecorder.addEventListener('keydown', (e) => {
+      if (!shortcutListening) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Ignore pure modifier presses (Ctrl alone, Alt alone, Shift alone)
+      const isOnlyModifier = e.code.startsWith('Control') || e.code.startsWith('Alt')
+        || e.code.startsWith('Shift') || e.code.startsWith('Meta');
+
+      if (isOnlyModifier) return;
+
+      const modifiers = {
+        ctrl: e.ctrlKey,
+        alt: e.altKey,
+        shift: e.shiftKey,
+        meta: e.metaKey,
+      };
+
+      // Require at least one modifier for a global shortcut
+      if (!modifiers.ctrl && !modifiers.alt && !modifiers.shift && !modifiers.meta) {
+        shortcutHint.textContent = typexI18n.t('settings.shortcut_need_modifier');
+        shortcutHint.classList.add('error');
+        shortcutHint.classList.remove('success');
+        return;
+      }
+
+      const key = normalizeKeyCode(e.code);
+      const shortcut = formatShortcut(modifiers, key);
+
+      shortcutListening = false;
+      shortcutRecorder.classList.remove('listening');
+      shortcutRecorder.textContent = shortcut;
+      shortcutHint.textContent = typexI18n.t('settings.shortcut_saving');
+      shortcutHint.classList.remove('error', 'success');
+
+      invoke('update_shortcut', { shortcut }).then(() => {
+        if (currentConfig) currentConfig.shortcut.record = shortcut;
+        shortcutRecorder.textContent = shortcut;
+        shortcutHint.textContent = typexI18n.t('settings.shortcut_saved');
+        shortcutHint.classList.add('success');
+        shortcutHint.classList.remove('error');
+      }).catch((err) => {
+        shortcutRecorder.textContent = currentConfig ? currentConfig.shortcut.record : 'Ctrl+Alt+Space';
+        shortcutRecorder.classList.add('conflict');
+        shortcutHint.textContent = err;
+        shortcutHint.classList.add('error');
+        shortcutHint.classList.remove('success');
+      });
+    });
+
+    // Cancel listening on Escape or click outside
+    shortcutRecorder.addEventListener('keydown', (e) => {
+      if (!shortcutListening) return;
+      if (e.code === 'Escape') {
+        shortcutListening = false;
+        shortcutRecorder.classList.remove('listening');
+        shortcutRecorder.textContent = currentConfig ? currentConfig.shortcut.record : 'Ctrl+Alt+Space';
+        shortcutHint.textContent = typexI18n.t('settings.shortcut_hint');
+        shortcutHint.classList.remove('error', 'success');
+        e.preventDefault();
+      }
+    });
+
+    document.addEventListener('click', (e) => {
+      if (shortcutListening && !shortcutRecorder.contains(e.target)) {
+        shortcutListening = false;
+        shortcutRecorder.classList.remove('listening');
+        shortcutRecorder.textContent = currentConfig ? currentConfig.shortcut.record : 'Ctrl+Alt+Space';
+        shortcutHint.textContent = typexI18n.t('settings.shortcut_hint');
+        shortcutHint.classList.remove('error', 'success');
+      }
+    });
+
+    // ── Recording state from Tauri events ──
+    const recordingIndicator = document.getElementById('recording-indicator');
+    const { listen } = window.__TAURI_INTERNALS__.event;
+
+    // ── Recording view: three-state UI ──
+    const recordBtn = document.getElementById('record-btn');
+    const recordStatus = document.getElementById('record-status');
+    const recordTimer = document.getElementById('record-timer');
+    const recordLevelSection = document.getElementById('record-level-section');
+    const recordLevelFill = document.getElementById('record-level-fill');
+    let recordingState = 'idle'; // 'idle' | 'recording' | 'transcribing'
+    let timerStart = null;
+    let timerInterval = null;
+
+    function setRecordingState(state) {
+      recordingState = state;
+      recordBtn.classList.remove('recording', 'transcribing');
+      recordStatus.classList.remove('recording-state', 'transcribing-state');
+
+      if (state === 'idle') {
+        recordBtn.classList.remove('recording', 'transcribing');
+        recordStatus.textContent = typexI18n.t('record.idle');
+        recordTimer.style.display = 'none';
+        recordLevelSection.style.display = 'none';
+        stopTimer();
+      } else if (state === 'recording') {
+        recordBtn.classList.add('recording');
+        recordStatus.classList.add('recording-state');
+        recordStatus.textContent = typexI18n.t('record.recording');
+        recordTimer.style.display = 'block';
+        recordLevelSection.style.display = 'block';
+        startTimer();
+      } else if (state === 'transcribing') {
+        recordBtn.classList.add('transcribing');
+        recordStatus.classList.add('transcribing-state');
+        recordStatus.textContent = typexI18n.t('record.transcribing');
+        recordLevelSection.style.display = 'none';
+        stopTimer();
+      }
+    }
+
+    function startTimer() {
+      timerStart = Date.now();
+      recordTimer.textContent = '00:00';
+      timerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - timerStart) / 1000);
+        const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
+        const secs = String(elapsed % 60).padStart(2, '0');
+        recordTimer.textContent = `${mins}:${secs}`;
+      }, 1000);
+    }
+
+    function stopTimer() {
+      if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    }
+
+    // Record button click → toggle recording
+    recordBtn.addEventListener('click', () => {
+      if (recordingState === 'transcribing') return; // disabled during transcribing
+      invoke('handle_record_toggle_cmd');
+    });
+
+    // Populate audio device dropdown in recording view
+    async function loadRecordDevices() {
+      const select = document.getElementById('record-audio-device');
+      try {
+        const devices = await invoke('list_audio_devices');
+        const currentDevice = currentConfig ? (currentConfig.audio.device || '') : '';
+        select.innerHTML = '<option value="">default</option>';
+        devices.forEach(name => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          if (name === currentDevice) opt.selected = true;
+          select.appendChild(opt);
+        });
+      } catch { select.innerHTML = '<option value="">default</option>'; }
+    }
+
+    // Audio device change in recording view → sync to settings
+    document.getElementById('record-audio-device').addEventListener('change', (e) => {
+      document.getElementById('audio-device').value = e.target.value;
+    });
+
+    // Audio level from main window Tauri event
+    listen('audio-level', (event) => {
+      if (recordingState !== 'recording') return;
+      const rms = event.payload.rms || 0;
+      // Scale RMS for visual: clamp 0-1, use exponential for visibility
+      const pct = Math.min(100, Math.round(rms * 300));
+      recordLevelFill.style.width = pct + '%';
+    });
+
+    listen('recording-state', (event) => {
+      recordingIndicator.style.display = event.payload.recording ? 'flex' : 'none';
+      if (event.payload.recording) {
+        setRecordingState('recording');
+      } else {
+        // Recording stopped → enter transcribing state
+        setRecordingState('transcribing');
+      }
+    });
+
+    listen('history-updated', () => {
+      loadHistory();
+      // Transcription finished → return to idle
+      if (recordingState === 'transcribing') {
+        setRecordingState('idle');
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,4 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 fn main() {
-    println!("TypeX Desktop — Tauri app placeholder");
-    println!("Run `typex-cli` for the CLI demo.");
+    typex_desktop_lib::run()
 }
