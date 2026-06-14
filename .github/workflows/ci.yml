@@ -20,6 +20,10 @@ jobs:
       - run: sudo apt-get update
       - run: sudo apt-get install -y libasound2-dev libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
       - run: cargo fmt -- --check
+      # Pin alloc-no-stdlib to v2.0.4: v3.0.0 (published 2026-06-14) introduces
+      # a semver-incompatible Allocator<T> trait that breaks brotli v8.0.3.
+      # TODO: remove once brotli / tauri-codegen upstream updates to v3.
+      - run: cargo update -p alloc-no-stdlib --precise 2.0.4
       - run: cargo clippy -- -D warnings
       - run: cargo build
       - run: cargo test
