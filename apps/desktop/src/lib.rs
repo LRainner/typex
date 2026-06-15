@@ -439,21 +439,15 @@ fn handle_record_toggle(app: &tauri::AppHandle) {
             match started_rx.recv() {
                 Ok(Ok(())) => {}
                 Ok(Err(e)) => {
-                    state
-                        .capture
-                        .lock()
-                        .unwrap()
-                        .replace(new_capture_from_state(&state));
+                    let new_capture = new_capture_from_state(&state);
+                    state.capture.lock().unwrap().replace(new_capture);
                     show_overlay_error(&app_clone, &format!("录音启动失败: {}", e));
                     state.recording_starting.store(false, Ordering::Release);
                     return;
                 }
                 Err(_) => {
-                    state
-                        .capture
-                        .lock()
-                        .unwrap()
-                        .replace(new_capture_from_state(&state));
+                    let new_capture = new_capture_from_state(&state);
+                    state.capture.lock().unwrap().replace(new_capture);
                     show_overlay_error(&app_clone, "录音启动中断");
                     state.recording_starting.store(false, Ordering::Release);
                     return;
@@ -541,11 +535,10 @@ async fn process_recording(app: tauri::AppHandle) {
         }
     };
 
-    state
-        .capture
-        .lock()
-        .unwrap()
-        .replace(new_capture_from_state(&state));
+    // Compute new capture before acquiring the lock to avoid a
+    // lock-order inversion with save_config (which holds config → capture).
+    let new_capture = new_capture_from_state(&state);
+    state.capture.lock().unwrap().replace(new_capture);
 
     let acc_handle = match acc_future.await {
         Ok(Ok(handle)) => handle,
