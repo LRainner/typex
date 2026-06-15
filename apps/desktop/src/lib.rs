@@ -1,6 +1,6 @@
 use std::sync::{
     Arc, Mutex,
-    atomic::{AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
 };
 
 use rusqlite::Connection;
@@ -33,6 +33,8 @@ struct AppState {
     shortcut: Mutex<String>,
     overlay_error_token: AtomicU64,
     overlay_save_token: AtomicU64,
+    /// Prevents concurrent recording start attempts.
+    recording_starting: AtomicBool,
     /// Tokio runtime handle — needed because global shortcut callbacks run outside Tokio context.
     rt: tokio::runtime::Handle,
 }
@@ -369,6 +371,8 @@ fn handle_record_toggle(app: &tauri::AppHandle) {
     if let Some(stop_tx) = stop_lock.take() {
         // ── Stop recording ──
         drop(stop_lock);
+        // Clear starting flag (no-op if already false).
+        state.recording_starting.store(false, Ordering::Release);
         stop_tx.send(()).ok();
         let _ = app.emit(
             "recording-state",
@@ -387,99 +391,124 @@ fn handle_record_toggle(app: &tauri::AppHandle) {
         // ── Start recording ──
         drop(stop_lock);
 
-        let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
+        // Guard against concurrent start attempts (the calling thread may be
+        // the GUI event loop or a global-shortcut WndProc callback — neither
+        // should ever block).
+        if state.recording_starting.swap(true, Ordering::AcqRel) {
+            tracing::warn!("recording start already in progress, ignoring duplicate toggle");
+            return;
+        }
+
         let capture = state.capture.lock().unwrap().take();
         let Some(capture) = capture else {
+            state.recording_starting.store(false, Ordering::Release);
             tracing::warn!("no microphone capture available");
             show_overlay_error(app, "麦克风不可用，请检查音频设备设置");
             return;
         };
 
-        let (level_tx, mut level_rx) = tokio::sync::mpsc::channel::<typex_audio::AudioLevel>(32);
-        let (started_tx, started_rx) = std::sync::mpsc::channel();
-        let acc_future = rt.spawn_blocking(move || {
-            let recorder = match capture.record_session_with_levels(Some(level_tx)) {
-                Ok(recorder) => recorder,
-                Err(e) => {
-                    let _ = started_tx.send(Err(e.to_string()));
-                    return Err(e);
-                }
-            };
-            let _ = started_tx.send(Ok(()));
-            stop_rx.recv().ok();
-            Ok(recorder.into_accumulator())
-        });
-
-        match started_rx.recv() {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => {
-                state
-                    .capture
-                    .lock()
-                    .unwrap()
-                    .replace(new_capture_from_state(&state));
-                show_overlay_error(app, &format!("录音启动失败: {}", e));
-                return;
-            }
-            Err(e) => {
-                state
-                    .capture
-                    .lock()
-                    .unwrap()
-                    .replace(new_capture_from_state(&state));
-                show_overlay_error(app, &format!("录音启动中断: {}", e));
-                return;
-            }
-        }
-
-        state.recording_stop.lock().unwrap().replace(stop_tx);
-        state
-            .recording_acc_future
-            .lock()
-            .unwrap()
-            .replace(acc_future);
-
-        let level_app = app.clone();
+        // Spawn the entire start-up sequence in a background task so the
+        // calling thread returns immediately.
+        let app_clone = app.clone();
         rt.spawn(async move {
-            let mut count = 0u32;
-            let mut latest: Option<typex_audio::AudioLevel> = None;
-            let mut tick = tokio::time::interval(std::time::Duration::from_millis(33));
-            loop {
-                tokio::select! {
-                    level = level_rx.recv() => {
-                        match level {
-                            Some(level) => latest = Some(level),
-                            None => break,
-                        }
-                    }
-                    _ = tick.tick() => {
-                        let Some(level) = latest.take() else { continue; };
-                        count += 1;
-                        if count <= 20 || count.is_multiple_of(100) {
-                            tracing::info!("audio level #{}: rms={:.4}, peak={:.4}", count, level.rms, level.peak);
-                        }
-                        let rms = finite_level(level.rms);
-                        let peak = finite_level(level.peak);
-                        let payload = serde_json::json!({ "rms": rms, "peak": peak });
+            let state = app_clone.state::<AppState>();
 
-                        // Send to overlay via eval
-                        if let Some(w) = level_app.get_webview_window("overlay") {
-                            let js = format!("window.typexAudioLevel({})", payload);
-                            if let Err(e) = w.eval(&js) && count <= 1 {
-                                tracing::warn!("eval audio-level failed: {}", e);
+            let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
+            let (level_tx, mut level_rx) =
+                tokio::sync::mpsc::channel::<typex_audio::AudioLevel>(32);
+            let (started_tx, started_rx) = std::sync::mpsc::channel();
+
+            let acc_future = tokio::task::spawn_blocking(move || {
+                let recorder = match capture.record_session_with_levels(Some(level_tx)) {
+                    Ok(recorder) => recorder,
+                    Err(e) => {
+                        let _ = started_tx.send(Err(e.to_string()));
+                        return Err(e);
+                    }
+                };
+                let _ = started_tx.send(Ok(()));
+                stop_rx.recv().ok();
+                Ok(recorder.into_accumulator())
+            });
+
+            // Wait for the recording to actually start (or fail).
+            // This recv() blocks only this Tokio task, not the GUI thread.
+            match started_rx.recv() {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => {
+                    state
+                        .capture
+                        .lock()
+                        .unwrap()
+                        .replace(new_capture_from_state(&state));
+                    show_overlay_error(&app_clone, &format!("录音启动失败: {}", e));
+                    state.recording_starting.store(false, Ordering::Release);
+                    return;
+                }
+                Err(_) => {
+                    state
+                        .capture
+                        .lock()
+                        .unwrap()
+                        .replace(new_capture_from_state(&state));
+                    show_overlay_error(&app_clone, "录音启动中断");
+                    state.recording_starting.store(false, Ordering::Release);
+                    return;
+                }
+            }
+
+            // Recording is now live — publish state.
+            state.recording_starting.store(false, Ordering::Release);
+            state.recording_stop.lock().unwrap().replace(stop_tx);
+            state
+                .recording_acc_future
+                .lock()
+                .unwrap()
+                .replace(acc_future);
+
+            // Spawn audio-level monitoring loop.
+            let level_app = app_clone.clone();
+            tokio::spawn(async move {
+                let mut count = 0u32;
+                let mut latest: Option<typex_audio::AudioLevel> = None;
+                let mut tick = tokio::time::interval(std::time::Duration::from_millis(33));
+                loop {
+                    tokio::select! {
+                        level = level_rx.recv() => {
+                            match level {
+                                Some(level) => latest = Some(level),
+                                None => break,
                             }
                         }
+                        _ = tick.tick() => {
+                            let Some(level) = latest.take() else { continue; };
+                            count += 1;
+                            if count <= 20 || count.is_multiple_of(100) {
+                                tracing::info!("audio level #{}: rms={:.4}, peak={:.4}", count, level.rms, level.peak);
+                            }
+                            let rms = finite_level(level.rms);
+                            let peak = finite_level(level.peak);
+                            let payload = serde_json::json!({ "rms": rms, "peak": peak });
 
-                        // Emit to main window via Tauri event
-                        let _ = level_app.emit("audio-level", AudioLevelPayload { rms, peak });
+                            // Send to overlay via eval
+                            if let Some(w) = level_app.get_webview_window("overlay") {
+                                let js = format!("window.typexAudioLevel({})", payload);
+                                if let Err(e) = w.eval(&js) && count <= 1 {
+                                    tracing::warn!("eval audio-level failed: {}", e);
+                                }
+                            }
+
+                            // Emit to main window via Tauri event
+                            let _ = level_app.emit("audio-level", AudioLevelPayload { rms, peak });
+                        }
                     }
                 }
-            }
-            tracing::info!("audio level stream ended after {} forwarded samples", count);
-        });
+                tracing::info!("audio level stream ended after {} forwarded samples", count);
+            });
 
-        let _ = app.emit("recording-state", RecordingStatePayload { recording: true });
-        show_overlay(app, OverlayState::Recording);
+            let _ = app_clone.emit("recording-state", RecordingStatePayload { recording: true });
+            show_overlay(&app_clone, OverlayState::Recording);
+        });
     }
 }
 
@@ -574,11 +603,12 @@ async fn process_recording(app: tauri::AppHandle) {
         let now = chrono::Utc::now().to_rfc3339();
         let limit = state.config.lock().unwrap().history.log_limit;
         let db = state.db.lock().unwrap();
-        db.execute(
+        if let Err(e) = db.execute(
             "INSERT INTO history (text, created_at) VALUES (?1, ?2)",
             rusqlite::params![result.text, now],
-        )
-        .unwrap_or(0);
+        ) {
+            tracing::error!("failed to insert history entry: {}", e);
+        }
         prune_history(&db, limit);
         drop(db);
     }
@@ -645,6 +675,12 @@ pub fn run() {
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
     tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
+    // Create a dedicated Tokio runtime that lives for the entire application
+    // lifetime (run() blocks until exit). Its handle is shared with global
+    // shortcut callbacks that run outside the async context.
+    let runtime = tokio::runtime::Runtime::new().expect("failed to create Tokio runtime");
+    let rt = runtime.handle().clone();
+
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             minimize,
@@ -662,7 +698,7 @@ pub fn run() {
             handle_record_toggle_cmd,
             get_system_info,
         ])
-        .setup(|app| {
+        .setup(move |app| {
             // Load or create config
             let cfg_path = config_path(app.handle());
             let config = if cfg_path.exists() {
@@ -703,18 +739,6 @@ pub fn run() {
 
             let capture = typex_audio::MicrophoneCapture::new(config.audio.device.clone());
 
-            // Create a dedicated Tokio runtime for async tasks spawned from
-            // non-async contexts (e.g., global shortcut WndProc callback).
-            let rt = {
-                let runtime =
-                    tokio::runtime::Runtime::new().expect("failed to create Tokio runtime");
-                let handle = runtime.handle().clone();
-                // Leak the runtime so its worker threads stay alive for the
-                // process lifetime. This is fine for a desktop app.
-                std::mem::forget(runtime);
-                handle
-            };
-
             app.manage(AppState {
                 config: Mutex::new(config),
                 config_path: cfg_path.clone(),
@@ -726,7 +750,8 @@ pub fn run() {
                 shortcut: Mutex::new(current_shortcut.clone()),
                 overlay_error_token: AtomicU64::new(0),
                 overlay_save_token: AtomicU64::new(0),
-                rt,
+                recording_starting: AtomicBool::new(false),
+                rt: rt.clone(),
             });
 
             if let Err(e) = app.global_shortcut().register(current_shortcut.as_str()) {
