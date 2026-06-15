@@ -376,7 +376,12 @@ where
     let mut sum_squares = 0.0_f64;
     let mut peak = 0.0_f64;
     for &sample in samples {
-        let value = Into::<f64>::into(sample).clamp(-1.0, 1.0).abs();
+        let mut value = Into::<f64>::into(sample);
+        if value.is_nan() {
+            value = 0.0;
+        } else {
+            value = value.abs().min(1.0);
+        }
         sum_squares += value * value;
         peak = peak.max(value);
     }

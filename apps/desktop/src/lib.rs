@@ -63,7 +63,14 @@ fn init_db(conn: &Connection) -> rusqlite::Result<()> {
         );",
     )?;
     // Migration: add pinned column to existing tables that lack it
-    let _ = conn.execute_batch("ALTER TABLE history ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
+    if let Err(e) =
+        conn.execute_batch("ALTER TABLE history ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
+    {
+        let err_msg = e.to_string();
+        if !err_msg.contains("duplicate column name") {
+            return Err(e);
+        }
+    }
     Ok(())
 }
 
@@ -130,8 +137,8 @@ fn history_entry_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<HistoryEn
 fn prune_history(conn: &Connection, limit: usize) {
     if limit > 0 {
         conn.execute(
-            "DELETE FROM history WHERE id NOT IN (
-                SELECT id FROM history ORDER BY id DESC LIMIT ?1
+            "DELETE FROM history WHERE pinned = 0 AND id NOT IN (
+                SELECT id FROM history WHERE pinned = 0 ORDER BY id DESC LIMIT ?1
             )",
             rusqlite::params![limit],
         )
@@ -629,21 +636,14 @@ fn update_shortcut(
         return Ok(());
     }
 
-    let register = |shortcut: &str| gs.register(shortcut);
+    // Register new shortcut first; only unregister old on success.
+    // This avoids needing rollback logic if the new shortcut fails.
+    if let Err(e) = gs.register(shortcut.as_str()) {
+        return Err(format!("快捷键注册失败，可能与其他应用冲突: {}", e));
+    }
 
     if let Err(e) = gs.unregister(old.as_str()) {
         tracing::warn!("failed to unregister old shortcut {}: {}", old, e);
-    }
-
-    if let Err(e) = register(shortcut.as_str()) {
-        let rollback = register(old.as_str())
-            .map_err(|rollback| format!("；恢复旧快捷键也失败: {}", rollback))
-            .err()
-            .unwrap_or_default();
-        return Err(format!(
-            "快捷键注册失败，可能与其他应用冲突: {}{}",
-            e, rollback
-        ));
     }
 
     state.config.lock().unwrap().shortcut.record = shortcut.clone();
@@ -842,21 +842,22 @@ pub fn run() {
             overlay_window.on_window_event(move |event| {
                 if let WindowEvent::Moved(position) = event {
                     let state = overlay_app_handle.state::<AppState>();
-                    {
-                        let mut config = state.config.lock().unwrap();
-                        config.overlay.x = Some(position.x as f64);
-                        config.overlay.y = Some(position.y as f64);
-                    }
                     let token = state.overlay_save_token.fetch_add(1, Ordering::Relaxed) + 1;
                     let app_handle = overlay_app_handle.clone();
                     let path = config_path_for_overlay.clone();
                     let rt = state.rt.clone();
+                    let x = position.x as f64;
+                    let y = position.y as f64;
                     rt.spawn(async move {
                         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
                         let state = app_handle.state::<AppState>();
                         if state.overlay_save_token.load(Ordering::Relaxed) == token {
-                            let config = state.config.lock().unwrap().clone();
-                            let _ = config.save(&path);
+                            let mut config = state.config.lock().unwrap();
+                            config.overlay.x = Some(x);
+                            config.overlay.y = Some(y);
+                            let config_clone = config.clone();
+                            drop(config);
+                            let _ = config_clone.save(&path);
                         }
                     });
                 }
