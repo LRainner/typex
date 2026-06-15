@@ -23,6 +23,7 @@
   "settings.llm_endpoint": "Endpoint",
   "settings.llm_api_key": "API Key",
   "settings.llm_model": "Model",
+  "settings.llm_prompt": "System Prompt",
   "settings.plugins": "Plugins",
   "settings.injector": "Injector",
   "settings.injector_clipboard": "Clipboard injection",

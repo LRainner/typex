@@ -100,6 +100,38 @@ fn create_llm_provider(config: &AppConfig) -> anyhow::Result<Option<Arc<dyn LlmP
 
     match config.llm.provider.as_str() {
         "mock" | "" => Ok(Some(Arc::new(typex_llm::mock::MockLlmProvider::new()))),
+        "openai-compatible" => {
+            let endpoint = config
+                .llm
+                .endpoint
+                .as_deref()
+                .unwrap_or("https://api.openai.com/v1");
+            let api_key = config
+                .llm
+                .api_key
+                .clone()
+                .or_else(|| std::env::var("OPENAI_API_KEY").ok())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty());
+
+            let model = config.llm.model.as_deref().unwrap_or("gpt-4o-mini");
+
+            let has_key = api_key.is_some();
+            tracing::info!(
+                "LLM provider={} model={} has_api_key={}",
+                "openai-compatible",
+                model,
+                has_key
+            );
+            let provider = typex_llm::openai_compat::OpenAiCompatibleLlmProvider::new(
+                endpoint.to_string(),
+                api_key,
+                model.to_string(),
+            )
+            .with_system_prompt(config.llm.prompt.clone().unwrap_or_default());
+
+            Ok(Some(Arc::new(provider)))
+        }
         other => anyhow::bail!("unknown LLM provider: {}", other),
     }
 }

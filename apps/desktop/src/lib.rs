@@ -208,13 +208,24 @@ fn get_config(state: tauri::State<AppState>) -> AppConfig {
 
 #[tauri::command]
 fn save_config(state: tauri::State<AppState>, config: AppConfig) -> Result<(), String> {
-    let pipeline = build_pipeline(&config).map_err(|e| e.to_string())?;
-    let capture = typex_audio::MicrophoneCapture::new(config.audio.device.clone());
-
+    // 1. Persist config to disk FIRST — always save user settings
     config.save(&state.config_path).map_err(|e| e.to_string())?;
-    *state.config.lock().unwrap() = config;
-    *state.pipeline.lock().unwrap() = pipeline;
 
+    // 2. Update in-memory config immediately
+    *state.config.lock().unwrap() = config.clone();
+
+    // 3. Rebuild pipeline (non-fatal: keep old pipeline on failure)
+    match build_pipeline(&config) {
+        Ok(pipeline) => {
+            *state.pipeline.lock().unwrap() = pipeline;
+        }
+        Err(e) => {
+            tracing::warn!("Pipeline rebuild failed (old pipeline kept): {}", e);
+        }
+    }
+
+    // 4. Update audio capture if not currently recording
+    let capture = typex_audio::MicrophoneCapture::new(config.audio.device.clone());
     if state.recording_stop.lock().unwrap().is_none() {
         state.capture.lock().unwrap().replace(capture);
     }

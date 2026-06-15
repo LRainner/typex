@@ -199,7 +199,7 @@
       color: var(--text-secondary);
       margin-bottom: 3px;
     }
-    input, select {
+    input, select, textarea {
       width: 100%;
       padding: 6px 8px;
       font-family: var(--font-mono);
@@ -211,8 +211,8 @@
       outline: none;
       transition: border-color 0.2s;
     }
-    input:focus, select:focus { border-color: var(--input-focus); }
-    input::placeholder { color: var(--text-muted); }
+    input:focus, select:focus, textarea:focus { border-color: var(--input-focus); }
+    input::placeholder, textarea::placeholder { color: var(--text-muted); }
     select {
       cursor: pointer;
       appearance: none;
@@ -749,7 +749,7 @@
             </div>
             <div class="field">
               <div class="field-label" data-i18n="settings.asr_endpoint"></div>
-              <input id="asr-endpoint" value="https://api.openai.com/v1" />
+              <input id="asr-endpoint" type="text" value="https://api.openai.com/v1" />
             </div>
             <div class="field">
               <div class="field-label" data-i18n="settings.asr_api_key"></div>
@@ -757,11 +757,11 @@
             </div>
             <div class="field">
               <div class="field-label" data-i18n="settings.asr_model"></div>
-              <input id="asr-model" value="whisper-1" />
+              <input id="asr-model" type="text" value="whisper-1" />
             </div>
             <div class="field">
               <div class="field-label" data-i18n="settings.asr_language"></div>
-              <input id="asr-language" placeholder="en, zh, ja..." />
+              <input id="asr-language" type="text" placeholder="en, zh, ja..." />
             </div>
           </div>
 
@@ -779,12 +779,13 @@
               <div class="field">
                 <div class="field-label" data-i18n="settings.llm_provider"></div>
                 <select id="llm-provider">
-                  <option value="mock">Mock</option>
+                  <option value="mock">Mock (passthrough)</option>
+                  <option value="openai-compatible">OpenAI-Compatible</option>
                 </select>
               </div>
               <div class="field">
                 <div class="field-label" data-i18n="settings.llm_endpoint"></div>
-                <input id="llm-endpoint" placeholder="http://..." />
+                <input id="llm-endpoint" type="text" placeholder="http://..." />
               </div>
               <div class="field">
                 <div class="field-label" data-i18n="settings.llm_api_key"></div>
@@ -792,7 +793,11 @@
               </div>
               <div class="field">
                 <div class="field-label" data-i18n="settings.llm_model"></div>
-                <input id="llm-model" placeholder="gpt-4o-mini" />
+                <input id="llm-model" type="text" placeholder="gpt-4o-mini" />
+              </div>
+              <div class="field">
+                <div class="field-label" data-i18n="settings.llm_prompt"></div>
+                <textarea id="llm-prompt" rows="3" placeholder="Leave empty for sensible defaults"></textarea>
               </div>
             </div>
           </div>
@@ -988,6 +993,7 @@
       document.getElementById('llm-endpoint').value = currentConfig.llm.endpoint || '';
       document.getElementById('llm-api-key').value = currentConfig.llm.api_key || '';
       document.getElementById('llm-model').value = currentConfig.llm.model || '';
+      document.getElementById('llm-prompt').value = currentConfig.llm.prompt || '';
       updateLlmVisibility();
 
       const plugins = currentConfig.pipeline.plugins || [];
@@ -1039,6 +1045,7 @@
       currentConfig.llm.endpoint = document.getElementById('llm-endpoint').value || null;
       currentConfig.llm.api_key = document.getElementById('llm-api-key').value || null;
       currentConfig.llm.model = document.getElementById('llm-model').value || null;
+      currentConfig.llm.prompt = document.getElementById('llm-prompt').value || '';
 
       const plugins = [];
       if (document.getElementById('plugin-filler').checked) plugins.push('filler_remover');
@@ -1074,11 +1081,19 @@
       }
     });
 
-    document.querySelectorAll('#view-settings input, #view-settings select').forEach(el => {
-      // Skip language dropdown — handled separately
+    // Auto-save on change for selects and checkboxes
+    document.querySelectorAll('#view-settings select, #view-settings input[type="checkbox"]').forEach(el => {
       if (el.id === 'ui-language') return;
       el.addEventListener('change', () => {
-        // Sync audio device dropdowns between settings and recording views
+        if (el.id === 'audio-device') {
+          document.getElementById('record-audio-device').value = el.value;
+        }
+        saveConfig();
+      });
+    });
+    // Auto-save on input for text/password/number/textarea fields
+    document.querySelectorAll('#view-settings input[type="text"], #view-settings input[type="password"], #view-settings input[type="number"], #view-settings textarea').forEach(el => {
+      el.addEventListener('input', () => {
         if (el.id === 'audio-device') {
           document.getElementById('record-audio-device').value = el.value;
         }
