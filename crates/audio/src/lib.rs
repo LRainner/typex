@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 
 use anyhow::Result;
 use bytes::Bytes;
+use cpal::Sample;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use futures::stream::BoxStream;
 use rubato::Resampler;
@@ -12,6 +13,12 @@ struct DeviceInfo {
     channels: usize,
     needs_resampling: bool,
     resample_ratio: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct AudioLevel {
+    pub rms: f32,
+    pub peak: f32,
 }
 
 pub struct MicrophoneCapture {
@@ -41,7 +48,7 @@ impl MicrophoneCapture {
         let (stream, raw_rx, info) = self.setup_device_and_stream()?;
         tracing::info!("microphone capture started, press Ctrl+C to stop");
         let (out_tx, out_rx) = tokio::sync::mpsc::channel::<Result<Bytes>>(32);
-        spawn_resample_task(raw_rx, info, out_tx);
+        spawn_resample_task(raw_rx, info, out_tx, None);
         let stream_out =
             futures::StreamExt::boxed(tokio_stream::wrappers::ReceiverStream::new(out_rx));
         Ok((stream, stream_out))
@@ -49,10 +56,18 @@ impl MicrophoneCapture {
 
     /// Start a session-mode recording. Call `SessionRecorder::stop()` to end.
     pub fn record_session(&self) -> Result<SessionRecorder> {
+        self.record_session_with_levels(None)
+    }
+
+    /// Start a session-mode recording with optional audio level monitoring.
+    pub fn record_session_with_levels(
+        &self,
+        level_tx: Option<tokio::sync::mpsc::Sender<AudioLevel>>,
+    ) -> Result<SessionRecorder> {
         let (stream, raw_rx, info) = self.setup_device_and_stream()?;
         tracing::info!("session recording started");
         let (out_tx, mut out_rx) = tokio::sync::mpsc::channel::<Result<Bytes>>(32);
-        spawn_resample_task(raw_rx, info, out_tx);
+        spawn_resample_task(raw_rx, info, out_tx, level_tx);
 
         // Spawn an accumulator task that continuously drains the output channel
         // into a Vec, preventing backpressure on the resampling task.
@@ -105,20 +120,19 @@ impl MicrophoneCapture {
         let input_sample_rate: u32 = supported_config.sample_rate();
         let channels = supported_config.channels() as usize;
         tracing::info!(
-            "device sample rate: {}Hz, channels: {}, target: {}Hz",
+            "device sample rate: {}Hz, channels: {}, sample format: {:?}, target: {}Hz",
             input_sample_rate,
             channels,
+            supported_config.sample_format(),
             self.target_sample_rate
         );
-
-        let config = supported_config.config();
 
         let needs_resampling = input_sample_rate != self.target_sample_rate;
         let resample_ratio = self.target_sample_rate as f64 / input_sample_rate as f64;
 
         let (raw_tx, raw_rx) = tokio::sync::mpsc::channel::<Vec<f32>>(32);
 
-        let stream = build_input_stream(&device, &config, raw_tx)?;
+        let stream = build_input_stream(&device, &supported_config, raw_tx)?;
         stream.play()?;
 
         let info = DeviceInfo {
@@ -147,12 +161,25 @@ impl SessionRecorder {
         drop(self.stream);
         self.accumulator.await?
     }
+
+    /// Drop the audio stream (stops recording) and return the accumulator handle.
+    /// Unlike `stop()`, this does not await the accumulator — the caller must
+    /// `.await` the returned handle separately to collect PCM data.
+    /// This is needed because `SessionRecorder` is not `Send` (due to `cpal::Stream`),
+    /// so it cannot be moved into an async task. Use this in `spawn_blocking` contexts:
+    /// create the recorder, wait for a stop signal, then call `into_accumulator()` to
+    /// separate the Send-safe handle from the non-Send stream.
+    pub fn into_accumulator(self) -> tokio::task::JoinHandle<Result<Vec<u8>>> {
+        drop(self.stream);
+        self.accumulator
+    }
 }
 
 fn spawn_resample_task(
     raw_rx: tokio::sync::mpsc::Receiver<Vec<f32>>,
     info: DeviceInfo,
     out_tx: tokio::sync::mpsc::Sender<Result<Bytes>>,
+    mut level_tx: Option<tokio::sync::mpsc::Sender<AudioLevel>>,
 ) {
     let DeviceInfo {
         channels,
@@ -222,6 +249,7 @@ fn spawn_resample_task(
                     match resampler.process(&buf, 0, None) {
                         Ok(output) => {
                             let samples = output.take_data();
+                            send_level(&mut level_tx, &samples);
                             let pcm = float_to_pcm_bytes(&samples);
                             if out_tx.send(Ok(pcm)).await.is_err() {
                                 return;
@@ -239,6 +267,7 @@ fn spawn_resample_task(
                     }
                 }
             } else {
+                send_level(&mut level_tx, &mono);
                 let pcm = float_to_pcm_bytes(&mono);
                 if out_tx.send(Ok(pcm)).await.is_err() {
                     return;
@@ -257,6 +286,7 @@ fn spawn_resample_task(
                 && let Ok(output) = resampler.process(&buf, 0, None)
             {
                 let samples = output.take_data();
+                send_level(&mut level_tx, &samples);
                 let pcm = float_to_pcm_bytes(&samples);
                 let _ = out_tx.send(Ok(pcm)).await;
             }
@@ -280,13 +310,39 @@ fn downmix_to_mono(interleaved: &[f32], channels: usize) -> Vec<f32> {
 
 fn build_input_stream(
     device: &cpal::Device,
-    config: &cpal::StreamConfig,
+    supported_config: &cpal::SupportedStreamConfig,
     tx: tokio::sync::mpsc::Sender<Vec<f32>>,
 ) -> Result<cpal::Stream> {
+    let config = supported_config.config();
+    match supported_config.sample_format() {
+        cpal::SampleFormat::F32 => build_typed_input_stream::<f32>(device, &config, tx),
+        cpal::SampleFormat::I16 => build_typed_input_stream::<i16>(device, &config, tx),
+        cpal::SampleFormat::U16 => build_typed_input_stream::<u16>(device, &config, tx),
+        cpal::SampleFormat::I32 => build_typed_input_stream::<i32>(device, &config, tx),
+        cpal::SampleFormat::F64 => build_typed_input_stream::<f64>(device, &config, tx),
+        format => anyhow::bail!("unsupported audio input sample format: {:?}", format),
+    }
+}
+
+fn build_typed_input_stream<T>(
+    device: &cpal::Device,
+    config: &cpal::StreamConfig,
+    tx: tokio::sync::mpsc::Sender<Vec<f32>>,
+) -> Result<cpal::Stream>
+where
+    T: Sample + cpal::SizedSample,
+    f32: cpal::FromSample<T>,
+{
     let stream = device.build_input_stream(
         config,
-        move |data: &[f32], _: &cpal::InputCallbackInfo| {
-            let _ = tx.try_send(data.to_vec());
+        move |data: &[T], _: &cpal::InputCallbackInfo| {
+            let samples: Vec<f32> = data
+                .iter()
+                .map(|&sample| sample.to_sample::<f32>())
+                .collect();
+            if tx.try_send(samples).is_err() {
+                tracing::trace!("dropping audio input chunk because raw channel is full");
+            }
         },
         |err| {
             tracing::error!("audio capture error: {}", err);
@@ -306,4 +362,47 @@ where
         pcm.extend_from_slice(&value.to_le_bytes());
     }
     Bytes::from(pcm)
+}
+
+fn audio_level<T>(samples: &[T]) -> AudioLevel
+where
+    T: Into<f64> + Copy,
+{
+    if samples.is_empty() {
+        return AudioLevel {
+            rms: 0.0,
+            peak: 0.0,
+        };
+    }
+
+    let mut sum_squares = 0.0_f64;
+    let mut peak = 0.0_f64;
+    for &sample in samples {
+        let mut value = Into::<f64>::into(sample);
+        if value.is_nan() {
+            value = 0.0;
+        } else {
+            value = value.abs().min(1.0);
+        }
+        sum_squares += value * value;
+        peak = peak.max(value);
+    }
+
+    AudioLevel {
+        rms: (sum_squares / samples.len() as f64).sqrt() as f32,
+        peak: peak as f32,
+    }
+}
+
+fn send_level<T>(level_tx: &mut Option<tokio::sync::mpsc::Sender<AudioLevel>>, samples: &[T])
+where
+    T: Into<f64> + Copy,
+{
+    if let Some(tx) = level_tx {
+        let level = audio_level(samples);
+        tracing::trace!("audio level: rms={:.4}, peak={:.4}", level.rms, level.peak);
+        if tx.try_send(level).is_err() && tx.is_closed() {
+            *level_tx = None;
+        }
+    }
 }

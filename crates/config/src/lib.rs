@@ -17,6 +17,18 @@ pub struct AppConfig {
 
     #[serde(default)]
     pub audio: AudioConfig,
+
+    #[serde(default)]
+    pub history: HistoryConfig,
+
+    #[serde(default)]
+    pub shortcut: ShortcutConfig,
+
+    #[serde(default)]
+    pub overlay: OverlayConfig,
+
+    #[serde(default)]
+    pub ui: UiConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,6 +88,15 @@ impl AppConfig {
         Ok(config)
     }
 
+    pub fn save(&self, path: &std::path::Path) -> Result<()> {
+        let content = toml::to_string_pretty(self)?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(path, content)?;
+        Ok(())
+    }
+
     pub fn default_toml() -> String {
         let config = AppConfig::default();
         toml::to_string_pretty(&config).unwrap_or_default()
@@ -122,4 +143,67 @@ impl Default for InjectorConfig {
 pub struct AudioConfig {
     #[serde(default)]
     pub device: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistoryConfig {
+    /// Transcription log limit, 0 means unlimited (default)
+    #[serde(default)]
+    pub log_limit: usize,
+    /// Recording session limit, default 50
+    #[serde(default = "default_recording_limit")]
+    pub recording_limit: usize,
+}
+
+impl Default for HistoryConfig {
+    fn default() -> Self {
+        Self {
+            log_limit: 0,
+            recording_limit: default_recording_limit(),
+        }
+    }
+}
+
+fn default_recording_limit() -> usize {
+    50
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShortcutConfig {
+    /// Record toggle hotkey, e.g. "Ctrl+Alt+Space"
+    #[serde(default = "default_shortcut")]
+    pub record: String,
+}
+
+impl Default for ShortcutConfig {
+    fn default() -> Self {
+        Self {
+            record: default_shortcut(),
+        }
+    }
+}
+
+fn default_shortcut() -> String {
+    "Ctrl+Alt+Space".into()
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UiConfig {
+    /// Language preference: "auto" (follow system), "en", "zh-CN"
+    #[serde(default = "default_language")]
+    pub language: String,
+}
+
+fn default_language() -> String {
+    "auto".into()
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct OverlayConfig {
+    /// Overlay window X position (logical pixels), None = auto-center
+    #[serde(default)]
+    pub x: Option<f64>,
+    /// Overlay window Y position (logical pixels), None = default top
+    #[serde(default)]
+    pub y: Option<f64>,
 }

@@ -8,6 +8,8 @@ Cargo.lock
 *.swp
 *.swo
 *~
+.claude
+.mimocode
 
 # OS
 .DS_Store

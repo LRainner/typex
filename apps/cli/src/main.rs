@@ -1,17 +1,8 @@
 use anyhow::Result;
-use std::sync::Arc;
 use tokio::io::AsyncBufReadExt;
 
-use typex_asr::AsrProvider;
-use typex_asr::mock::MockAsrProvider;
-use typex_asr::openai_compat::OpenAiCompatibleAsrProvider;
 use typex_config::AppConfig;
-use typex_injector::clipboard::ClipboardInjector;
-use typex_plugin::{
-    filler_remover::FillerRemover, sentence_formatter::SentenceFormatter, text_cleaner::TextCleaner,
-};
-
-use typex_core::TypeX;
+use typex_core::{TypeXBuildOptions, build_typex_from_config};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -21,25 +12,12 @@ async fn main() -> Result<()> {
 
     let config = load_config()?;
     let input_file = parse_input_arg()?;
-
-    let asr: Arc<dyn AsrProvider> = match config.asr.provider.as_str() {
-        "mock" => Arc::new(MockAsrProvider::new()),
-        "openai-compatible" | "" => create_openai_provider(&config)?,
-        other => anyhow::bail!("unknown ASR provider: {}", other),
+    let options = if input_file.is_some() {
+        TypeXBuildOptions::file()
+    } else {
+        TypeXBuildOptions::session()
     };
-
-    let mut builder = TypeX::builder(asr);
-    for name in &config.pipeline.plugins {
-        if let Some(plugin) = create_plugin(name) {
-            builder = builder.plugin(plugin);
-        } else {
-            tracing::warn!("unknown plugin: {}", name);
-        }
-    }
-    if input_file.is_none() {
-        builder = builder.injector(Arc::new(ClipboardInjector));
-    }
-    let typex = builder.build();
+    let typex = build_typex_from_config(&config, options)?;
 
     if let Some(path) = &input_file {
         // File mode: transcribe audio file
@@ -99,40 +77,6 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-fn create_plugin(name: &str) -> Option<Arc<dyn typex_plugin::Plugin>> {
-    match name {
-        "filler_remover" => Some(Arc::new(FillerRemover)),
-        "sentence_formatter" => Some(Arc::new(SentenceFormatter)),
-        "text_cleaner" => Some(Arc::new(TextCleaner)),
-        _ => None,
-    }
-}
-
-fn create_openai_provider(config: &AppConfig) -> Result<Arc<OpenAiCompatibleAsrProvider>> {
-    let endpoint = config
-        .asr
-        .endpoint
-        .as_deref()
-        .unwrap_or("https://api.openai.com/v1");
-    let api_key = config
-        .asr
-        .api_key
-        .clone()
-        .or_else(|| std::env::var("OPENAI_API_KEY").ok())
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
-    let model = config.asr.model.as_deref().unwrap_or("whisper-1");
-
-    let mut provider =
-        OpenAiCompatibleAsrProvider::new(endpoint.to_string(), api_key, model.to_string());
-
-    if let Some(lang) = &config.asr.language {
-        provider = provider.with_language(lang.clone());
-    }
-
-    Ok(Arc::new(provider))
 }
 
 fn parse_input_arg() -> Result<Option<String>> {
