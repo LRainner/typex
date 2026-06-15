@@ -91,12 +91,10 @@ fn query_history(conn: &Connection, limit: usize) -> rusqlite::Result<Vec<Histor
     let mut stmt = conn.prepare(sql)?;
     let entries = if limit > 0 {
         stmt.query_map(rusqlite::params![limit], history_entry_from_row)?
-            .filter_map(|e| e.ok())
-            .collect()
+            .collect::<Result<Vec<_>, _>>()?
     } else {
         stmt.query_map([], history_entry_from_row)?
-            .filter_map(|e| e.ok())
-            .collect()
+            .collect::<Result<Vec<_>, _>>()?
     };
     Ok(entries)
 }
@@ -115,12 +113,10 @@ fn search_history_query(
     let mut stmt = conn.prepare(sql)?;
     let entries = if limit > 0 {
         stmt.query_map(rusqlite::params![pattern, limit], history_entry_from_row)?
-            .filter_map(|e| e.ok())
-            .collect()
+            .collect::<Result<Vec<_>, _>>()?
     } else {
         stmt.query_map(rusqlite::params![pattern], history_entry_from_row)?
-            .filter_map(|e| e.ok())
-            .collect()
+            .collect::<Result<Vec<_>, _>>()?
     };
     Ok(entries)
 }

@@ -1049,7 +1049,7 @@
 
       currentConfig.injector.method = document.getElementById('injector-method').value || 'clipboard';
       currentConfig.audio.device = document.getElementById('audio-device').value || null;
-      currentConfig.history.log_limit = parseInt(document.getElementById('history-log-limit').value) || 0;
+      currentConfig.history.log_limit = Math.max(0, parseInt(document.getElementById('history-log-limit').value) || 0);
 
       // Language is handled separately by set_language, don't include it in saveConfig
 

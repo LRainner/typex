@@ -179,7 +179,7 @@ fn spawn_resample_task(
     raw_rx: tokio::sync::mpsc::Receiver<Vec<f32>>,
     info: DeviceInfo,
     out_tx: tokio::sync::mpsc::Sender<Result<Bytes>>,
-    level_tx: Option<tokio::sync::mpsc::Sender<AudioLevel>>,
+    mut level_tx: Option<tokio::sync::mpsc::Sender<AudioLevel>>,
 ) {
     let DeviceInfo {
         channels,
@@ -249,7 +249,7 @@ fn spawn_resample_task(
                     match resampler.process(&buf, 0, None) {
                         Ok(output) => {
                             let samples = output.take_data();
-                            send_level(&level_tx, &samples);
+                            send_level(&mut level_tx, &samples);
                             let pcm = float_to_pcm_bytes(&samples);
                             if out_tx.send(Ok(pcm)).await.is_err() {
                                 return;
@@ -267,7 +267,7 @@ fn spawn_resample_task(
                     }
                 }
             } else {
-                send_level(&level_tx, &mono);
+                send_level(&mut level_tx, &mono);
                 let pcm = float_to_pcm_bytes(&mono);
                 if out_tx.send(Ok(pcm)).await.is_err() {
                     return;
@@ -286,7 +286,7 @@ fn spawn_resample_task(
                 && let Ok(output) = resampler.process(&buf, 0, None)
             {
                 let samples = output.take_data();
-                send_level(&level_tx, &samples);
+                send_level(&mut level_tx, &samples);
                 let pcm = float_to_pcm_bytes(&samples);
                 let _ = out_tx.send(Ok(pcm)).await;
             }
@@ -392,13 +392,15 @@ where
     }
 }
 
-fn send_level<T>(level_tx: &Option<tokio::sync::mpsc::Sender<AudioLevel>>, samples: &[T])
+fn send_level<T>(level_tx: &mut Option<tokio::sync::mpsc::Sender<AudioLevel>>, samples: &[T])
 where
     T: Into<f64> + Copy,
 {
     if let Some(tx) = level_tx {
         let level = audio_level(samples);
         tracing::trace!("audio level: rms={:.4}, peak={:.4}", level.rms, level.peak);
-        let _ = tx.try_send(level);
+        if tx.try_send(level).is_err() && tx.is_closed() {
+            *level_tx = None;
+        }
     }
 }
