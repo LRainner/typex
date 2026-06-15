@@ -318,6 +318,8 @@ fn build_input_stream(
         cpal::SampleFormat::F32 => build_typed_input_stream::<f32>(device, &config, tx),
         cpal::SampleFormat::I16 => build_typed_input_stream::<i16>(device, &config, tx),
         cpal::SampleFormat::U16 => build_typed_input_stream::<u16>(device, &config, tx),
+        cpal::SampleFormat::I32 => build_typed_input_stream::<i32>(device, &config, tx),
+        cpal::SampleFormat::F64 => build_typed_input_stream::<f64>(device, &config, tx),
         format => anyhow::bail!("unsupported audio input sample format: {:?}", format),
     }
 }

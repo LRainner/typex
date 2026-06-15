@@ -63,13 +63,16 @@ fn init_db(conn: &Connection) -> rusqlite::Result<()> {
         );",
     )?;
     // Migration: add pinned column to existing tables that lack it
-    if let Err(e) =
-        conn.execute_batch("ALTER TABLE history ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
-    {
-        let err_msg = e.to_string();
-        if !err_msg.contains("duplicate column name") {
-            return Err(e);
-        }
+    let has_pinned: bool = conn
+        .query_row(
+            "SELECT 1 FROM pragma_table_info('history') WHERE name = 'pinned'",
+            [],
+            |_| Ok(true),
+        )
+        .unwrap_or(false);
+
+    if !has_pinned {
+        conn.execute_batch("ALTER TABLE history ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")?;
     }
     Ok(())
 }
@@ -846,7 +849,9 @@ pub fn run() {
                             config.overlay.y = Some(y);
                             let config_clone = config.clone();
                             drop(config);
-                            let _ = config_clone.save(&path);
+                            tokio::task::spawn_blocking(move || {
+                                let _ = config_clone.save(&path);
+                            });
                         }
                     });
                 }
