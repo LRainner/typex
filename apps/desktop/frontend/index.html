@@ -267,6 +267,63 @@
       border-top: 1px solid var(--border);
       margin: 12px 0;
     }
+    .advanced-section {
+      padding: 0;
+      overflow: hidden;
+    }
+    .advanced-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px;
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+    }
+    .advanced-summary::-webkit-details-marker { display: none; }
+    .advanced-summary:focus-visible {
+      outline: 3px solid var(--focus-ring);
+      outline-offset: -3px;
+    }
+    .advanced-summary-copy { min-width: 0; }
+    .advanced-summary .section-desc { margin-bottom: 0; }
+    .advanced-chevron {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      color: var(--text-muted);
+      transition: transform 0.18s ease;
+    }
+    .advanced-chevron::before {
+      content: '';
+      display: block;
+      width: 8px;
+      height: 8px;
+      border-right: 1.5px solid currentColor;
+      border-bottom: 1.5px solid currentColor;
+      transform: rotate(45deg);
+      margin: 3px auto 0;
+    }
+    .advanced-section[open] .advanced-chevron { transform: rotate(180deg); }
+    .advanced-content {
+      border-top: 1px solid var(--border);
+      padding: 14px 16px 16px;
+    }
+    .settings-subsection + .settings-subsection {
+      border-top: 1px solid var(--border);
+      margin-top: 14px;
+      padding-top: 14px;
+    }
+    .subsection-title {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
 
     /* ── Form ── */
     .field { margin-bottom: 12px; }
@@ -1033,40 +1090,6 @@
             </div>
           </div>
 
-          <!-- Speech Recognition -->
-          <div class="section">
-            <div class="section-title" data-i18n="settings.asr"></div>
-            <div class="section-desc" data-i18n="settings.asr_desc"></div>
-            <div class="field">
-              <label class="field-label" for="asr-provider" data-i18n="settings.asr_provider"></label>
-              <select id="asr-provider">
-                <option value="openai-compatible">OpenAI Compatible</option>
-                <option value="mock">Mock</option>
-              </select>
-            </div>
-            <div class="field">
-              <label class="field-label" for="asr-endpoint" data-i18n="settings.asr_endpoint"></label>
-              <input id="asr-endpoint" type="text" value="https://api.openai.com/v1" aria-describedby="asr-endpoint-help asr-endpoint-error" />
-              <div class="field-help" id="asr-endpoint-help" data-i18n="settings.endpoint_help"></div>
-              <div class="field-error" id="asr-endpoint-error" style="display:none;" data-i18n="settings.endpoint_error"></div>
-            </div>
-            <div class="field">
-              <label class="field-label" for="asr-api-key" data-i18n="settings.asr_api_key"></label>
-              <input id="asr-api-key" type="password" placeholder="sk-..." aria-describedby="asr-api-key-help" />
-              <div class="field-help" id="asr-api-key-help" data-i18n="settings.api_key_help"></div>
-            </div>
-            <div class="field">
-              <label class="field-label" for="asr-model" data-i18n="settings.asr_model"></label>
-              <input id="asr-model" type="text" value="whisper-1" aria-describedby="asr-model-help" />
-              <div class="field-help" id="asr-model-help" data-i18n="settings.asr_model_help"></div>
-            </div>
-            <div class="field">
-              <label class="field-label" for="asr-language" data-i18n="settings.asr_language"></label>
-              <input id="asr-language" type="text" placeholder="en, zh, ja..." aria-describedby="asr-language-help" />
-              <div class="field-help" id="asr-language-help" data-i18n="settings.asr_language_help"></div>
-            </div>
-          </div>
-
           <!-- AI Polish -->
           <div class="section">
             <div class="section-title" data-i18n="settings.llm"></div>
@@ -1081,109 +1104,160 @@
                 <div class="field-help" data-i18n="settings.llm_enabled_help"></div>
               </div>
             </div>
-            <div id="llm-details" style="display:none;">
-              <div class="field">
-                <label class="field-label" for="llm-provider" data-i18n="settings.llm_provider"></label>
-                <select id="llm-provider">
-                  <option value="mock">Mock (passthrough)</option>
-                  <option value="openai-compatible">OpenAI-Compatible</option>
-                </select>
-              </div>
-              <div class="field">
-                <label class="field-label" for="llm-endpoint" data-i18n="settings.llm_endpoint"></label>
-                <input id="llm-endpoint" type="text" placeholder="http://..." aria-describedby="llm-endpoint-help llm-endpoint-error" />
-                <div class="field-help" id="llm-endpoint-help" data-i18n="settings.endpoint_help"></div>
-                <div class="field-error" id="llm-endpoint-error" style="display:none;" data-i18n="settings.endpoint_error"></div>
-              </div>
-              <div class="field">
-                <label class="field-label" for="llm-api-key" data-i18n="settings.llm_api_key"></label>
-                <input id="llm-api-key" type="password" placeholder="sk-..." aria-describedby="llm-api-key-help" />
-                <div class="field-help" id="llm-api-key-help" data-i18n="settings.api_key_help"></div>
-              </div>
-              <div class="field">
-                <label class="field-label" for="llm-model" data-i18n="settings.llm_model"></label>
-                <input id="llm-model" type="text" placeholder="gpt-4o-mini" aria-describedby="llm-model-help" />
-                <div class="field-help" id="llm-model-help" data-i18n="settings.llm_model_help"></div>
-              </div>
-              <div class="field">
-                <label class="field-label" for="llm-prompt" data-i18n="settings.llm_prompt"></label>
-                <textarea id="llm-prompt" rows="3" data-i18n-placeholder="settings.llm_prompt_placeholder" aria-describedby="llm-prompt-help"></textarea>
-                <div class="field-help" id="llm-prompt-help" data-i18n="settings.llm_prompt_help"></div>
-              </div>
-            </div>
           </div>
 
-          <!-- Text Processing -->
+          <!-- Output -->
           <div class="section">
-            <div class="section-title" data-i18n="settings.plugins"></div>
-            <div class="section-desc" data-i18n="settings.plugins_desc"></div>
-            <div class="toggle-row">
-              <label class="toggle" for="plugin-filler">
-                <input type="checkbox" id="plugin-filler" checked />
-                <span class="slider"></span>
-              </label>
-              <div class="toggle-copy">
-                <label class="toggle-label" for="plugin-filler" data-i18n="settings.plugin_filler_label"></label>
-                <div class="field-help">filler_remover</div>
-              </div>
-            </div>
-            <div class="toggle-row">
-              <label class="toggle" for="plugin-sentence">
-                <input type="checkbox" id="plugin-sentence" checked />
-                <span class="slider"></span>
-              </label>
-              <div class="toggle-copy">
-                <label class="toggle-label" for="plugin-sentence" data-i18n="settings.plugin_sentence_label"></label>
-                <div class="field-help">sentence_formatter</div>
-              </div>
-            </div>
-            <div class="toggle-row">
-              <label class="toggle" for="plugin-cleaner">
-                <input type="checkbox" id="plugin-cleaner" checked />
-                <span class="slider"></span>
-              </label>
-              <div class="toggle-copy">
-                <label class="toggle-label" for="plugin-cleaner" data-i18n="settings.plugin_cleaner_label"></label>
-                <div class="field-help">text_cleaner</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Output & Advanced -->
-          <div class="section">
-            <div class="section-title" data-i18n="settings.output_advanced"></div>
-            <div class="section-desc" data-i18n="settings.output_advanced_desc"></div>
+            <div class="section-title" data-i18n="settings.output"></div>
+            <div class="section-desc" data-i18n="settings.output_desc"></div>
             <div class="field">
               <label class="field-label" for="injector-method" data-i18n="settings.injector"></label>
               <select id="injector-method">
-                <option value="clipboard">clipboard</option>
-                <option value="platform">platform</option>
+                <option value="clipboard" data-i18n="settings.injector_clipboard"></option>
+                <option value="platform" data-i18n="settings.injector_platform"></option>
               </select>
             </div>
             <div class="field">
-              <label class="field-label" for="pipeline-performance" data-i18n="settings.performance"></label>
-              <select id="pipeline-performance">
-                <option value="low">low</option>
-                <option value="balanced">balanced</option>
-                <option value="high">high</option>
+              <label class="field-label" for="ui-language" data-i18n="settings.language"></label>
+              <select id="ui-language">
+                <option value="auto" data-i18n="settings.language_auto"></option>
+                <option value="zh-CN">zh-CN</option>
+                <option value="en">en</option>
               </select>
-              <div class="field-help" data-i18n="settings.performance_note"></div>
             </div>
-            <hr class="section-divider" />
             <div class="field">
               <label class="field-label" for="history-log-limit" data-i18n="settings.history_limit"></label>
               <input id="history-log-limit" type="number" min="0" value="0" aria-describedby="history-log-limit-help" />
               <div class="field-help" id="history-log-limit-help" data-i18n="settings.history_limit_help"></div>
             </div>
-            <div class="field">
-              <label class="field-label" for="ui-language" data-i18n="settings.language"></label>
-              <select id="ui-language">
-                <option value="auto">auto</option>
-                <option value="zh-CN">zh-CN</option>
-                <option value="en">en</option>
-              </select>
-            </div>
           </div>
+
+          <!-- Advanced -->
+          <details class="section advanced-section" id="settings-advanced">
+            <summary class="advanced-summary">
+              <div class="advanced-summary-copy">
+                <div class="section-title" data-i18n="settings.advanced"></div>
+                <div class="section-desc" data-i18n="settings.advanced_desc"></div>
+              </div>
+              <span class="advanced-chevron" aria-hidden="true"></span>
+            </summary>
+            <div class="advanced-content">
+              <div class="settings-subsection">
+                <div class="subsection-title" data-i18n="settings.asr"></div>
+                <div class="field">
+                  <label class="field-label" for="asr-provider" data-i18n="settings.asr_provider"></label>
+                  <select id="asr-provider">
+                    <option value="openai-compatible">OpenAI Compatible</option>
+                    <option value="mock">Mock</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="asr-endpoint" data-i18n="settings.asr_endpoint"></label>
+                  <input id="asr-endpoint" type="text" value="https://api.openai.com/v1" aria-describedby="asr-endpoint-help asr-endpoint-error" />
+                  <div class="field-help" id="asr-endpoint-help" data-i18n="settings.endpoint_help"></div>
+                  <div class="field-error" id="asr-endpoint-error" style="display:none;" data-i18n="settings.endpoint_error"></div>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="asr-api-key" data-i18n="settings.asr_api_key"></label>
+                  <input id="asr-api-key" type="password" placeholder="sk-..." aria-describedby="asr-api-key-help" />
+                  <div class="field-help" id="asr-api-key-help" data-i18n="settings.api_key_help"></div>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="asr-model" data-i18n="settings.asr_model"></label>
+                  <input id="asr-model" type="text" value="whisper-1" aria-describedby="asr-model-help" />
+                  <div class="field-help" id="asr-model-help" data-i18n="settings.asr_model_help"></div>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="asr-language" data-i18n="settings.asr_language"></label>
+                  <input id="asr-language" type="text" placeholder="en, zh, ja..." aria-describedby="asr-language-help" />
+                  <div class="field-help" id="asr-language-help" data-i18n="settings.asr_language_help"></div>
+                </div>
+              </div>
+
+              <div class="settings-subsection">
+                <div class="subsection-title" data-i18n="settings.llm_provider_settings"></div>
+                <div id="llm-details" style="display:none;">
+                  <div class="field">
+                    <label class="field-label" for="llm-provider" data-i18n="settings.llm_provider"></label>
+                    <select id="llm-provider">
+                      <option value="mock">Mock (passthrough)</option>
+                      <option value="openai-compatible">OpenAI-Compatible</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="llm-endpoint" data-i18n="settings.llm_endpoint"></label>
+                    <input id="llm-endpoint" type="text" placeholder="http://..." aria-describedby="llm-endpoint-help llm-endpoint-error" />
+                    <div class="field-help" id="llm-endpoint-help" data-i18n="settings.endpoint_help"></div>
+                    <div class="field-error" id="llm-endpoint-error" style="display:none;" data-i18n="settings.endpoint_error"></div>
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="llm-api-key" data-i18n="settings.llm_api_key"></label>
+                    <input id="llm-api-key" type="password" placeholder="sk-..." aria-describedby="llm-api-key-help" />
+                    <div class="field-help" id="llm-api-key-help" data-i18n="settings.api_key_help"></div>
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="llm-model" data-i18n="settings.llm_model"></label>
+                    <input id="llm-model" type="text" placeholder="gpt-4o-mini" aria-describedby="llm-model-help" />
+                    <div class="field-help" id="llm-model-help" data-i18n="settings.llm_model_help"></div>
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="llm-prompt" data-i18n="settings.llm_prompt"></label>
+                    <textarea id="llm-prompt" rows="3" data-i18n-placeholder="settings.llm_prompt_placeholder" aria-describedby="llm-prompt-help"></textarea>
+                    <div class="field-help" id="llm-prompt-help" data-i18n="settings.llm_prompt_help"></div>
+                  </div>
+                </div>
+                <div class="field-help" id="llm-disabled-help" data-i18n="settings.llm_disabled_advanced"></div>
+              </div>
+
+              <div class="settings-subsection">
+                <div class="subsection-title" data-i18n="settings.plugins"></div>
+                <div class="section-desc" data-i18n="settings.plugins_desc"></div>
+                <div class="toggle-row">
+                  <label class="toggle" for="plugin-filler">
+                    <input type="checkbox" id="plugin-filler" checked />
+                    <span class="slider"></span>
+                  </label>
+                  <div class="toggle-copy">
+                    <label class="toggle-label" for="plugin-filler" data-i18n="settings.plugin_filler_label"></label>
+                    <div class="field-help">filler_remover</div>
+                  </div>
+                </div>
+                <div class="toggle-row">
+                  <label class="toggle" for="plugin-sentence">
+                    <input type="checkbox" id="plugin-sentence" checked />
+                    <span class="slider"></span>
+                  </label>
+                  <div class="toggle-copy">
+                    <label class="toggle-label" for="plugin-sentence" data-i18n="settings.plugin_sentence_label"></label>
+                    <div class="field-help">sentence_formatter</div>
+                  </div>
+                </div>
+                <div class="toggle-row">
+                  <label class="toggle" for="plugin-cleaner">
+                    <input type="checkbox" id="plugin-cleaner" checked />
+                    <span class="slider"></span>
+                  </label>
+                  <div class="toggle-copy">
+                    <label class="toggle-label" for="plugin-cleaner" data-i18n="settings.plugin_cleaner_label"></label>
+                    <div class="field-help">text_cleaner</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-subsection">
+                <div class="subsection-title" data-i18n="settings.performance"></div>
+                <div class="field">
+                  <label class="field-label" for="pipeline-performance" data-i18n="settings.performance"></label>
+                  <select id="pipeline-performance">
+                    <option value="low" data-i18n="settings.performance_low"></option>
+                    <option value="balanced" data-i18n="settings.performance_balanced"></option>
+                    <option value="high" data-i18n="settings.performance_high"></option>
+                  </select>
+                  <div class="field-help" data-i18n="settings.performance_note"></div>
+                </div>
+              </div>
+            </div>
+          </details>
 
           <div class="footer">BSL-1.1 · Non-commercial use</div>
         </div>
@@ -1351,9 +1425,12 @@
     // ── LLM toggle visibility ──
     const llmEnabledCheckbox = document.getElementById('llm-enabled');
     const llmDetails = document.getElementById('llm-details');
+    const llmDisabledHelp = document.getElementById('llm-disabled-help');
 
     function updateLlmVisibility() {
-      llmDetails.style.display = llmEnabledCheckbox.checked ? 'block' : 'none';
+      const enabled = llmEnabledCheckbox.checked;
+      llmDetails.style.display = enabled ? 'block' : 'none';
+      if (llmDisabledHelp) llmDisabledHelp.style.display = enabled ? 'none' : 'block';
     }
 
     llmEnabledCheckbox.addEventListener('change', () => {
