@@ -196,10 +196,17 @@ pub struct UiConfig {
     /// Language preference: "auto" (follow system), "en", "zh-CN"
     #[serde(default = "default_language")]
     pub language: String,
+    /// Theme preference: "system" (follow OS), "light", "dark"
+    #[serde(default = "default_theme")]
+    pub theme: String,
 }
 
 fn default_language() -> String {
     "auto".into()
+}
+
+fn default_theme() -> String {
+    "system".into()
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
