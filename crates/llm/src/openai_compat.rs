@@ -52,12 +52,14 @@ impl OpenAiCompatibleLlmProvider {
 
 #[derive(Deserialize)]
 struct ChatCompletionChunk {
+    #[serde(default)]
     choices: Vec<Choice>,
 }
 
 #[derive(Deserialize)]
 struct Choice {
-    delta: Delta,
+    #[serde(default)]
+    delta: Option<Delta>,
 }
 
 #[derive(Deserialize, Default)]
@@ -163,7 +165,6 @@ impl LlmProvider for OpenAiCompatibleLlmProvider {
             // codepoint with U+FFFD and the character would be lost forever).
             let mut stream = resp.bytes_stream();
             let mut buf: Vec<u8> = Vec::new();
-            let mut final_text = String::new();
 
             'stream: while let Some(result) = stream.next().await {
                 let bytes = match result {
@@ -178,8 +179,8 @@ impl LlmProvider for OpenAiCompatibleLlmProvider {
 
                 // Process complete SSE lines (delimited by \n)
                 while let Some(pos) = buf.iter().position(|&b| b == b'\n') {
-                    let line_bytes: Vec<u8> = buf.drain(..pos).collect();
-                    buf.remove(0); // discard the \n
+                    let mut line_bytes = buf.drain(..=pos).collect::<Vec<u8>>();
+                    line_bytes.pop(); // discard the \n
                     // Strip trailing \r if present (SSE lines may end with \r\n)
                     let line_bytes = line_bytes.strip_suffix(b"\r").unwrap_or(&line_bytes);
                     let line = String::from_utf8_lossy(line_bytes);
@@ -199,19 +200,17 @@ impl LlmProvider for OpenAiCompatibleLlmProvider {
                                 if let Some(content) = chunk
                                     .choices
                                     .first()
-                                    .and_then(|c| c.delta.content.as_deref())
-                                {
-                                    final_text.push_str(content);
-                                    if tx
+                                    .and_then(|c| c.delta.as_ref())
+                                    .and_then(|d| d.content.as_deref())
+                                    && tx
                                         .send(Ok(LlmResult {
                                             text: content.to_string(),
                                             is_final: false,
                                         }))
                                         .await
                                         .is_err()
-                                    {
-                                        return; // receiver dropped
-                                    }
+                                {
+                                    return; // receiver dropped
                                 }
                             }
                             Err(e) => {
