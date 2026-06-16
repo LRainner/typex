@@ -23,6 +23,7 @@
   "settings.llm_endpoint": "Endpoint",
   "settings.llm_api_key": "API Key",
   "settings.llm_model": "Model",
+  "settings.llm_prompt": "系统 Prompt",
   "settings.plugins": "文本处理",
   "settings.injector": "注入方式",
   "settings.injector_clipboard": "剪贴板注入",

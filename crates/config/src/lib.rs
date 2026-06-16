@@ -56,6 +56,10 @@ pub struct LlmConfig {
     pub model: Option<String>,
     #[serde(default)]
     pub api_key: Option<String>,
+    /// Custom system prompt for text optimization.
+    /// If None or empty, a sensible default is used.
+    #[serde(default)]
+    pub prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -207,3 +211,6 @@ pub struct OverlayConfig {
     #[serde(default)]
     pub y: Option<f64>,
 }
+
+#[cfg(test)]
+mod tests;

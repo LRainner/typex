@@ -21,3 +21,4 @@ pub trait LlmProvider: Send + Sync {
 }
 
 pub mod mock;
+pub mod openai_compat;
