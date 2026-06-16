@@ -35,7 +35,10 @@ impl OpenAiCompatibleLlmProvider {
             api_key,
             model,
             system_prompt: DEFAULT_SYSTEM_PROMPT.to_string(),
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
         }
     }
 
@@ -186,7 +189,8 @@ impl LlmProvider for OpenAiCompatibleLlmProvider {
                         continue;
                     }
 
-                    if let Some(data) = line.strip_prefix("data: ") {
+                    if let Some(data) = line.strip_prefix("data:") {
+                        let data = data.trim();
                         if data == "[DONE]" {
                             break 'stream;
                         }

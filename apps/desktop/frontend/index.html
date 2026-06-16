@@ -1507,6 +1507,7 @@
     // Audio device change in recording view → sync to settings
     document.getElementById('record-audio-device').addEventListener('change', (e) => {
       document.getElementById('audio-device').value = e.target.value;
+      document.getElementById('audio-device').dispatchEvent(new Event('change'));
     });
 
     // Audio level from main window Tauri event
