@@ -812,7 +812,8 @@ pub fn run() {
             let webview_url = tauri::WebviewUrl::App("index.html".into());
             let window = tauri::WebviewWindowBuilder::new(app, "main", webview_url)
                 .title("TypeX")
-                .inner_size(480.0, 520.0)
+                .inner_size(920.0, 640.0)
+                .min_inner_size(760.0, 520.0)
                 .center()
                 .visible(false)
                 .decorations(false)
