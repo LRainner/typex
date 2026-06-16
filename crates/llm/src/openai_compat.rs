@@ -154,11 +154,15 @@ impl LlmProvider for OpenAiCompatibleLlmProvider {
             }
 
             // ── 4. Parse SSE stream ──
+            // Use Vec<u8> buffer to safely accumulate raw bytes across TCP chunks.
+            // This avoids corrupting multi-byte UTF-8 characters that may be split
+            // across chunk boundaries (String::from_utf8_lossy would replace a split
+            // codepoint with U+FFFD and the character would be lost forever).
             let mut stream = resp.bytes_stream();
-            let mut buf = String::new();
+            let mut buf: Vec<u8> = Vec::new();
             let mut final_text = String::new();
 
-            while let Some(result) = stream.next().await {
+            'stream: while let Some(result) = stream.next().await {
                 let bytes = match result {
                     Ok(b) => b,
                     Err(e) => {
@@ -167,12 +171,16 @@ impl LlmProvider for OpenAiCompatibleLlmProvider {
                     }
                 };
 
-                buf.push_str(&String::from_utf8_lossy(&bytes[..]));
+                buf.extend_from_slice(&bytes);
 
-                // Process complete SSE lines
-                while let Some(pos) = buf.find('\n') {
-                    let line = buf[..pos].trim().to_string();
-                    buf = buf[pos + 1..].to_string();
+                // Process complete SSE lines (delimited by \n)
+                while let Some(pos) = buf.iter().position(|&b| b == b'\n') {
+                    let line_bytes: Vec<u8> = buf.drain(..pos).collect();
+                    buf.remove(0); // discard the \n
+                    // Strip trailing \r if present (SSE lines may end with \r\n)
+                    let line_bytes = line_bytes.strip_suffix(b"\r").unwrap_or(&line_bytes);
+                    let line = String::from_utf8_lossy(line_bytes);
+                    let line = line.trim();
 
                     if line.is_empty() || line.starts_with(':') {
                         continue;
@@ -180,7 +188,7 @@ impl LlmProvider for OpenAiCompatibleLlmProvider {
 
                     if let Some(data) = line.strip_prefix("data: ") {
                         if data == "[DONE]" {
-                            break;
+                            break 'stream;
                         }
                         match serde_json::from_str::<ChatCompletionChunk>(data) {
                             Ok(chunk) => {

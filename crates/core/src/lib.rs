@@ -72,9 +72,14 @@ fn create_asr_provider(config: &AppConfig) -> anyhow::Result<Arc<dyn AsrProvider
                 .asr
                 .api_key
                 .clone()
-                .or_else(|| std::env::var("OPENAI_API_KEY").ok())
                 .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty());
+                .filter(|s| !s.is_empty())
+                .or_else(|| {
+                    std::env::var("OPENAI_API_KEY")
+                        .ok()
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                });
             let model = config.asr.model.as_deref().unwrap_or("whisper-1");
 
             let mut provider = typex_asr::openai_compat::OpenAiCompatibleAsrProvider::new(
@@ -110,9 +115,14 @@ fn create_llm_provider(config: &AppConfig) -> anyhow::Result<Option<Arc<dyn LlmP
                 .llm
                 .api_key
                 .clone()
-                .or_else(|| std::env::var("OPENAI_API_KEY").ok())
                 .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty());
+                .filter(|s| !s.is_empty())
+                .or_else(|| {
+                    std::env::var("OPENAI_API_KEY")
+                        .ok()
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                });
 
             let model = config.llm.model.as_deref().unwrap_or("gpt-4o-mini");
 
