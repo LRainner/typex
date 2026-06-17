@@ -330,7 +330,7 @@ fn show_overlay(app: &tauri::AppHandle, state: OverlayState) {
             } else if let Some(monitor) = app.primary_monitor().ok().flatten() {
                 let screen_width = monitor.size().width as f64;
                 let scale = monitor.scale_factor();
-                let overlay_width = 180.0;
+                let overlay_width = 300.0;
                 let x = (screen_width / scale - overlay_width) / 2.0;
                 window
                     .set_position(tauri::Position::Logical(tauri::LogicalPosition::new(
@@ -362,13 +362,37 @@ fn show_overlay_error(app: &tauri::AppHandle, message: &str) {
         let json_msg = serde_json::to_string(message).unwrap_or_default();
         let _ = window.eval(format!("window.typexShowError({})", json_msg));
 
-        // Auto-hide the overlay window after 5 seconds
+        // Keep the recovery affordance visible long enough to read/copy.
         let app_clone = app.clone();
         let state = app.state::<AppState>();
         let token = state.overlay_error_token.fetch_add(1, Ordering::Relaxed) + 1;
         let rt = state.rt.clone();
         rt.spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+            let current = app_clone
+                .state::<AppState>()
+                .overlay_error_token
+                .load(Ordering::Relaxed);
+            if current == token {
+                hide_overlay(&app_clone);
+            }
+        });
+    }
+}
+
+/// Show successful injection feedback briefly and keep the result copyable while visible.
+fn show_overlay_injected(app: &tauri::AppHandle, text: &str) {
+    if let Some(window) = app.get_webview_window("overlay") {
+        window.show().ok();
+        let json_text = serde_json::to_string(text).unwrap_or_default();
+        let _ = window.eval(format!("window.typexShowInjected({})", json_text));
+
+        let app_clone = app.clone();
+        let state = app.state::<AppState>();
+        let token = state.overlay_error_token.fetch_add(1, Ordering::Relaxed) + 1;
+        let rt = state.rt.clone();
+        rt.spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(2800)).await;
             let current = app_clone
                 .state::<AppState>()
                 .overlay_error_token
@@ -608,23 +632,27 @@ async fn process_recording(app: tauri::AppHandle) {
         }
     };
 
-    // Step 4: save to history
-    if !result.text.is_empty() {
+    // Step 4: save to history and show completion feedback
+    let output_text = result.text.clone();
+    if !output_text.trim().is_empty() {
         let now = chrono::Utc::now().to_rfc3339();
         let limit = state.config.lock().unwrap().history.log_limit;
         let db = state.db.lock().unwrap();
         if let Err(e) = db.execute(
             "INSERT INTO history (text, created_at) VALUES (?1, ?2)",
-            rusqlite::params![result.text, now],
+            rusqlite::params![&output_text, now],
         ) {
             tracing::error!("failed to insert history entry: {}", e);
         }
         prune_history(&db, limit);
         drop(db);
-    }
 
-    let _ = app.emit("history-updated", ());
-    hide_overlay(&app);
+        let _ = app.emit("history-updated", ());
+        show_overlay_injected(&app, &output_text);
+    } else {
+        let _ = app.emit("history-updated", ());
+        show_overlay_error(&app, "没有识别到可输出文本");
+    }
 }
 
 #[tauri::command]
@@ -812,7 +840,8 @@ pub fn run() {
             let webview_url = tauri::WebviewUrl::App("index.html".into());
             let window = tauri::WebviewWindowBuilder::new(app, "main", webview_url)
                 .title("TypeX")
-                .inner_size(480.0, 520.0)
+                .inner_size(920.0, 640.0)
+                .min_inner_size(760.0, 520.0)
                 .center()
                 .visible(false)
                 .decorations(false)
@@ -831,9 +860,10 @@ pub fn run() {
             let overlay_url = tauri::WebviewUrl::App("overlay.html".into());
             let overlay_window = tauri::WebviewWindowBuilder::new(app, "overlay", overlay_url)
                 .title("TypeX Overlay")
-                .inner_size(180.0, 48.0)
+                .inner_size(300.0, 66.0)
                 .visible(false)
                 .decorations(false)
+                .transparent(true)
                 .shadow(false)
                 .always_on_top(true)
                 .skip_taskbar(true)

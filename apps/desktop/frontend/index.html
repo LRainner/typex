@@ -1,72 +1,127 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="system">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TypeX</title>
   <style>
     :root {
-      --font: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+      --font: Inter, -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
       --font-mono: "Cascadia Code", "Fira Code", "Consolas", monospace;
-      --radius: 8px;
-      --radius-sm: 5px;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --radius-lg: 18px;
     }
 
     /* Light theme */
     :root {
-      --bg: #ffffff;
-      --surface: #f7f7f8;
-      --surface-hover: #ededee;
+      --bg: #fbfbfc;
+      --surface: #f4f4f5;
+      --surface-raised: #ffffff;
+      --surface-hover: #ececef;
       --border: #e4e4e7;
-      --text: #1a1a1e;
-      --text-secondary: #6b6b76;
-      --text-muted: #a1a1aa;
-      --accent: #10b981;
-      --accent-hover: #059669;
-      --danger: #ef4444;
-      --titlebar-bg: #f7f7f8;
-      --titlebar-btn-hover: #e4e4e7;
-      --titlebar-close-hover: #ef4444;
+      --border-strong: #d7d7dd;
+      --text: #18181b;
+      --text-secondary: #666672;
+      --text-muted: #9a9aa5;
+      --accent: #0f9f7a;
+      --accent-hover: #0b8a69;
+      --accent-soft: rgba(15, 159, 122, 0.1);
+      --danger: #dc3f4f;
+      --danger-soft: rgba(220, 63, 79, 0.1);
+      --success: #0f9f7a;
+      --warning: #c98207;
+      --warning-soft: rgba(201, 130, 7, 0.12);
+      --focus-ring: rgba(15, 159, 122, 0.2);
+      --titlebar-bg: #f4f4f5;
+      --titlebar-btn-hover: #e8e8ec;
+      --titlebar-close-hover: #dc3f4f;
       --titlebar-close-text: #ffffff;
       --input-bg: #ffffff;
-      --input-border: #d4d4d8;
-      --input-focus: #10b981;
-      --toggle-bg: #d4d4d8;
-      --toggle-active: #10b981;
+      --input-border: #d7d7dd;
+      --input-focus: #0f9f7a;
+      --toggle-bg: #d7d7dd;
+      --toggle-active: #0f9f7a;
       --toggle-knob: #ffffff;
-      --shadow: 0 1px 3px rgba(0,0,0,0.06);
+      --shadow: 0 1px 2px rgba(24,24,27,0.04);
+      --shadow-elevated: 0 18px 48px rgba(24,24,27,0.1);
       --sidebar-bg: #f0f0f2;
-      --sidebar-active: #e4e4e7;
-      --empty-icon: #d4d4d8;
+      --sidebar-active: #ffffff;
+      --empty-icon: #d7d7dd;
     }
 
     /* Dark theme */
+    html[data-theme="dark"] {
+      --bg: #0d0f12;
+      --surface: #15181d;
+      --surface-raised: #1b1f25;
+      --surface-hover: #222731;
+      --border: #2a3039;
+      --border-strong: #38414d;
+      --text: #eef1f4;
+      --text-secondary: #a3abb7;
+      --text-muted: #697382;
+      --accent: #34d399;
+      --accent-hover: #6ee7b7;
+      --accent-soft: rgba(52, 211, 153, 0.12);
+      --danger: #fb7185;
+      --danger-soft: rgba(251, 113, 133, 0.12);
+      --success: #34d399;
+      --warning: #fbbf24;
+      --warning-soft: rgba(251, 191, 36, 0.12);
+      --focus-ring: rgba(52, 211, 153, 0.22);
+      --titlebar-bg: #15181d;
+      --titlebar-btn-hover: #222731;
+      --titlebar-close-hover: #e11d48;
+      --titlebar-close-text: #ffffff;
+      --input-bg: #101318;
+      --input-border: #2a3039;
+      --input-focus: #34d399;
+      --toggle-bg: #38414d;
+      --toggle-active: #34d399;
+      --toggle-knob: #eef1f4;
+      --shadow: 0 1px 2px rgba(0,0,0,0.24);
+      --shadow-elevated: 0 20px 52px rgba(0,0,0,0.35);
+      --sidebar-bg: #111419;
+      --sidebar-active: #1b1f25;
+      --empty-icon: #38414d;
+    }
+
     @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0f0f13;
-        --surface: #1a1a22;
-        --surface-hover: #24242e;
-        --border: #2a2a36;
-        --text: #e4e4ec;
-        --text-secondary: #9494a8;
-        --text-muted: #5c5c70;
+      html[data-theme="system"] {
+        --bg: #0d0f12;
+        --surface: #15181d;
+        --surface-raised: #1b1f25;
+        --surface-hover: #222731;
+        --border: #2a3039;
+        --border-strong: #38414d;
+        --text: #eef1f4;
+        --text-secondary: #a3abb7;
+        --text-muted: #697382;
         --accent: #34d399;
         --accent-hover: #6ee7b7;
-        --danger: #f87171;
-        --titlebar-bg: #1a1a22;
-        --titlebar-btn-hover: #2a2a36;
-        --titlebar-close-hover: #dc2626;
+        --accent-soft: rgba(52, 211, 153, 0.12);
+        --danger: #fb7185;
+        --danger-soft: rgba(251, 113, 133, 0.12);
+        --success: #34d399;
+        --warning: #fbbf24;
+        --warning-soft: rgba(251, 191, 36, 0.12);
+        --focus-ring: rgba(52, 211, 153, 0.22);
+        --titlebar-bg: #15181d;
+        --titlebar-btn-hover: #222731;
+        --titlebar-close-hover: #e11d48;
         --titlebar-close-text: #ffffff;
-        --input-bg: #0f0f13;
-        --input-border: #2a2a36;
+        --input-bg: #101318;
+        --input-border: #2a3039;
         --input-focus: #34d399;
-        --toggle-bg: #2a2a36;
+        --toggle-bg: #38414d;
         --toggle-active: #34d399;
-        --toggle-knob: #e4e4ec;
-        --shadow: 0 1px 3px rgba(0,0,0,0.3);
-        --sidebar-bg: #141418;
-        --sidebar-active: #2a2a36;
-        --empty-icon: #2a2a36;
+        --toggle-knob: #eef1f4;
+        --shadow: 0 1px 2px rgba(0,0,0,0.24);
+        --shadow-elevated: 0 20px 52px rgba(0,0,0,0.35);
+        --sidebar-bg: #111419;
+        --sidebar-active: #1b1f25;
+        --empty-icon: #38414d;
       }
     }
 
@@ -76,11 +131,25 @@
       background: var(--bg);
       color: var(--text);
       font-family: var(--font);
-      font-size: 13px;
+      font-size: 14px;
       line-height: 1.5;
       -webkit-font-smoothing: antialiased;
       overflow: hidden;
+      user-select: text;
+    }
+
+    button, .titlebar, .sidebar, .shortcut-recorder {
       user-select: none;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible,
+    .shortcut-recorder:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 4px var(--focus-ring);
     }
 
     .app { display: flex; flex-direction: column; height: 100vh; }
@@ -105,8 +174,9 @@
     .titlebar-title {
       font-family: var(--font-mono);
       font-size: 12px;
-      font-weight: 600;
-      color: var(--accent);
+      font-weight: 650;
+      color: var(--text);
+      letter-spacing: 0.02em;
     }
     .titlebar-controls {
       display: flex;
@@ -134,30 +204,31 @@
 
     /* ── Sidebar ── */
     .sidebar {
-      width: 100px;
+      width: 104px;
       background: var(--sidebar-bg);
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
-      padding-top: 8px;
-      gap: 2px;
+      padding: 10px 8px;
+      gap: 3px;
       flex-shrink: 0;
     }
     .sidebar-btn {
       width: 100%;
+      min-height: 36px;
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 8px 12px;
+      padding: 8px 10px;
       background: none;
-      border: none;
-      border-radius: 0;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
       color: var(--text-muted);
       cursor: pointer;
-      transition: background 0.15s, color 0.15s;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
-    .sidebar-btn:hover { background: var(--sidebar-active); color: var(--text-secondary); }
-    .sidebar-btn.active { background: var(--sidebar-active); color: var(--accent); }
+    .sidebar-btn:hover { background: var(--surface-hover); color: var(--text-secondary); }
+    .sidebar-btn.active { background: var(--sidebar-active); color: var(--text); border-color: var(--border); box-shadow: var(--shadow); }
     .sidebar-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
     .sidebar-btn-label {
       font-size: 12px;
@@ -168,21 +239,121 @@
     .content {
       flex: 1;
       overflow-y: auto;
-      padding: 16px 18px 18px;
+      padding: 18px 20px 20px;
+      background:
+        radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 8%, transparent), transparent 34%),
+        var(--bg);
     }
 
     /* ── Section ── */
     .section {
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 12px 14px;
-      background: var(--surface);
+      padding: 16px;
+      background: var(--surface-raised);
       box-shadow: var(--shadow);
       margin-bottom: 14px;
     }
+    .settings-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .page-title {
+      font-size: 20px;
+      font-weight: 650;
+      color: var(--text);
+      margin-bottom: 3px;
+    }
+    .page-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+    .save-status {
+      min-width: 82px;
+      text-align: right;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      padding-top: 4px;
+    }
+    .save-status.saving { color: var(--warning); }
+    .save-status.saved { color: var(--success); }
+    .save-status.error { color: var(--danger); }
     .section-title {
       font-family: var(--font-mono);
-      font-size: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .section-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      line-height: 1.55;
+    }
+    .section-divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 12px 0;
+    }
+    .advanced-section {
+      padding: 0;
+      overflow: hidden;
+    }
+    .advanced-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px;
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+    }
+    .advanced-summary::-webkit-details-marker { display: none; }
+    .advanced-summary:focus-visible {
+      outline: 3px solid var(--focus-ring);
+      outline-offset: -3px;
+    }
+    .advanced-summary-copy { min-width: 0; }
+    .advanced-summary .section-desc { margin-bottom: 0; }
+    .advanced-chevron {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      color: var(--text-muted);
+      transition: transform 0.18s ease;
+    }
+    .advanced-chevron::before {
+      content: '';
+      display: block;
+      width: 8px;
+      height: 8px;
+      border-right: 1.5px solid currentColor;
+      border-bottom: 1.5px solid currentColor;
+      transform: rotate(45deg);
+      margin: 3px auto 0;
+    }
+    .advanced-section[open] .advanced-chevron { transform: rotate(180deg); }
+    .advanced-content {
+      border-top: 1px solid var(--border);
+      padding: 14px 16px 16px;
+    }
+    .settings-subsection + .settings-subsection {
+      border-top: 1px solid var(--border);
+      margin-top: 14px;
+      padding-top: 14px;
+    }
+    .subsection-title {
+      font-family: var(--font-mono);
+      font-size: 11px;
       font-weight: 600;
       color: var(--text-muted);
       letter-spacing: 0.08em;
@@ -191,19 +362,36 @@
     }
 
     /* ── Form ── */
-    .field { margin-bottom: 8px; }
+    .field { margin-bottom: 12px; }
     .field:last-child { margin-bottom: 0; }
     .field-label {
-      font-size: 11px;
+      display: block;
+      font-size: 12px;
       font-weight: 500;
       color: var(--text-secondary);
-      margin-bottom: 3px;
+      margin-bottom: 4px;
+    }
+    .field-help,
+    .field-error {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      line-height: 1.45;
+      user-select: text;
+    }
+    .field-error { color: var(--danger); }
+    .field-warning { color: var(--warning); }
+    input[aria-invalid="true"],
+    textarea[aria-invalid="true"],
+    select[aria-invalid="true"] {
+      border-color: var(--danger);
     }
     input, select, textarea {
       width: 100%;
-      padding: 6px 8px;
+      min-height: 36px;
+      padding: 8px 10px;
       font-family: var(--font-mono);
-      font-size: 12px;
+      font-size: 13px;
       color: var(--text);
       background: var(--input-bg);
       border: 1px solid var(--input-border);
@@ -224,11 +412,11 @@
     select option { background: var(--surface); color: var(--text); }
 
     /* ── Toggle ── */
-    .toggle-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+    .toggle-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; min-height: 40px; }
     .toggle-row + .toggle-row { border-top: 1px solid var(--border); }
-    .toggle { position: relative; width: 30px; height: 16px; cursor: pointer; flex-shrink: 0; }
-    .toggle input { position: absolute; opacity: 0; width: 30px; height: 16px; cursor: pointer; margin: 0; padding: 0; }
-    .toggle .slider { position: absolute; inset: 0; background: var(--toggle-bg); border-radius: 8px; transition: background 0.2s; }
+    .toggle { position: relative; width: 38px; height: 24px; cursor: pointer; flex-shrink: 0; }
+    .toggle input { position: absolute; opacity: 0; width: 38px; height: 24px; cursor: pointer; margin: 0; padding: 0; }
+    .toggle .slider { position: absolute; inset: 4px; background: var(--toggle-bg); border-radius: 8px; transition: background 0.2s; }
     .toggle .slider::after {
       content: '';
       position: absolute;
@@ -239,7 +427,8 @@
     }
     .toggle input:checked + .slider { background: var(--toggle-active); }
     .toggle input:checked + .slider::after { transform: translateX(14px); }
-    .toggle-label { font-family: var(--font-mono); font-size: 11px; color: var(--text); }
+    .toggle-label { font-family: var(--font-mono); font-size: 12px; color: var(--text); }
+    .toggle-copy { display: flex; flex-direction: column; gap: 2px; }
 
     /* ── History ── */
     .history-toolbar {
@@ -251,7 +440,7 @@
       flex: 1;
       padding: 6px 8px 6px 28px;
       font-family: var(--font-mono);
-      font-size: 12px;
+      font-size: 13px;
       color: var(--text);
       background: var(--input-bg);
       border: 1px solid var(--input-border);
@@ -274,7 +463,7 @@
     }
     .select-count {
       font-family: var(--font-mono);
-      font-size: 11px;
+      font-size: 12px;
       color: var(--text-secondary);
     }
     .history-empty {
@@ -286,19 +475,24 @@
       color: var(--text-muted);
     }
     .history-empty svg { width: 48px; height: 48px; color: var(--empty-icon); margin-bottom: 12px; }
-    .history-empty p { font-size: 12px; }
+    .history-empty p { font-size: 13px; }
     .history-item {
       display: flex;
       align-items: flex-start;
       gap: 8px;
-      padding: 10px 0;
-      border-bottom: 1px solid var(--border);
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface-raised);
+      box-shadow: var(--shadow);
       cursor: pointer;
+      margin-bottom: 10px;
+      transition: background 0.15s, border-color 0.15s, transform 0.15s;
     }
-    .history-item:last-child { border-bottom: none; }
-    .history-item:hover { background: var(--surface-hover); margin: 0 -14px; padding: 10px 14px; border-radius: var(--radius-sm); }
-    .history-item.selected { background: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
-    .history-item.selected:hover { background: color-mix(in srgb, var(--accent) 15%, var(--surface-hover)); }
+    .history-item:last-child { margin-bottom: 0; }
+    .history-item:hover { background: var(--surface-hover); border-color: var(--border-strong); transform: translateY(-1px); }
+    .history-item.selected { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 28%, var(--border)); }
+    .history-item.selected:hover { background: color-mix(in srgb, var(--accent) 14%, var(--surface-hover)); }
     .history-item-checkbox {
       width: 16px; height: 16px;
       accent-color: var(--accent);
@@ -309,28 +503,42 @@
     .history-item-checkbox.hidden { display: none; }
     .history-item-content { flex: 1; min-width: 0; }
     .history-item-pinned {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      font-family: var(--font-mono);
       font-size: 10px;
       color: var(--accent);
-      margin-bottom: 2px;
+      border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+      border-radius: 999px;
+      background: var(--accent-soft);
+      padding: 2px 6px;
+      margin-bottom: 6px;
     }
     .history-time {
       font-family: var(--font-mono);
-      font-size: 10px;
+      font-size: 11px;
       color: var(--text-muted);
-      margin-bottom: 3px;
+      margin-bottom: 4px;
     }
     .history-text {
-      font-size: 12px;
+      font-size: 13px;
       color: var(--text);
-      line-height: 1.5;
+      line-height: 1.55;
       white-space: pre-wrap;
-      word-break: break-all;
+      word-break: break-word;
     }
     .history-text.truncated {
       overflow: hidden;
       display: -webkit-box;
-      -webkit-line-clamp: 2;
+      -webkit-line-clamp: 3;
       -webkit-box-orient: vertical;
+    }
+    .history-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
     }
     .history-footer {
       display: flex;
@@ -340,8 +548,8 @@
     }
     .btn-action {
       font-family: var(--font-mono);
-      font-size: 10px;
-      padding: 4px 10px;
+      font-size: 11px;
+      padding: 6px 11px;
       background: none;
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
@@ -353,8 +561,8 @@
     .btn-action.danger:hover { border-color: var(--danger); color: var(--danger); }
     .btn-clear {
       font-family: var(--font-mono);
-      font-size: 10px;
-      padding: 4px 10px;
+      font-size: 11px;
+      padding: 6px 11px;
       background: none;
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
@@ -514,74 +722,214 @@
     .view.active { display: block; }
 
     /* ── Record View ── */
+    .record-shell {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 10px 0 0;
+    }
+    .record-hero {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: linear-gradient(180deg, var(--surface-raised), var(--surface));
+      box-shadow: var(--shadow-elevated);
+      padding: 26px 24px 22px;
+    }
+    .record-hero::before {
+      content: '';
+      position: absolute;
+      inset: -40% -20% auto auto;
+      width: 220px;
+      height: 220px;
+      background: radial-gradient(circle, var(--accent-soft), transparent 65%);
+      pointer-events: none;
+    }
+    .record-header {
+      position: relative;
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+    .record-kicker {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 650;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .record-title {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      margin-bottom: 5px;
+    }
+    .record-subtitle {
+      max-width: 360px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-secondary);
+    }
+    .record-state-pill {
+      align-self: flex-start;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+      min-height: 26px;
+      padding: 5px 9px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface-raised);
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .record-state-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+    .record-state-pill.recording-state { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 28%, var(--border)); background: var(--danger-soft); }
+    .record-state-pill.recording-state .record-state-dot { background: var(--danger); animation: pulse 1.5s infinite; }
+    .record-state-pill.transcribing-state { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 32%, var(--border)); background: var(--warning-soft); }
+    .record-state-pill.transcribing-state .record-state-dot { background: var(--warning); }
     .record-center {
+      position: relative;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 40px 20px 20px;
       gap: 12px;
+      padding: 2px 0 4px;
     }
     .record-btn {
-      width: 80px; height: 80px;
+      width: 94px;
+      height: 94px;
       border-radius: 50%;
-      background: var(--accent);
-      border: none;
+      background: radial-gradient(circle at 35% 25%, color-mix(in srgb, #fff 28%, var(--accent)), var(--accent));
+      border: 1px solid color-mix(in srgb, var(--accent) 70%, #fff);
       color: #fff;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: background 0.2s, transform 0.15s, opacity 0.2s;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      transition: background 0.2s, transform 0.18s, opacity 0.2s, box-shadow 0.2s;
+      box-shadow: 0 14px 34px color-mix(in srgb, var(--accent) 24%, transparent);
     }
-    .record-btn:hover { transform: scale(1.05); }
-    .record-btn:active { transform: scale(0.96); }
+    .record-btn:hover { transform: translateY(-1px) scale(1.02); }
+    .record-btn:active { transform: scale(0.97); }
     .record-btn.recording {
-      background: var(--danger);
-      animation: pulse-btn 1.5s infinite;
+      background: radial-gradient(circle at 35% 25%, color-mix(in srgb, #fff 20%, var(--danger)), var(--danger));
+      border-color: color-mix(in srgb, var(--danger) 70%, #fff);
+      box-shadow: 0 0 0 9px var(--danger-soft), 0 16px 36px color-mix(in srgb, var(--danger) 25%, transparent);
+      animation: breathe-record 1.6s infinite;
     }
     .record-btn.transcribing {
       background: var(--text-muted);
-      opacity: 0.6;
+      border-color: var(--border-strong);
+      opacity: 0.72;
       cursor: not-allowed;
+      box-shadow: none;
     }
-    .record-btn-icon { width: 36px; height: 36px; }
-    @keyframes pulse-btn {
-      0%, 100% { box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
-      50% { box-shadow: 0 0 0 8px rgba(239,68,68,0.2); }
+    .record-btn-icon { width: 38px; height: 38px; }
+    @keyframes breathe-record {
+      0%, 100% { box-shadow: 0 0 0 7px var(--danger-soft), 0 16px 36px color-mix(in srgb, var(--danger) 22%, transparent); }
+      50% { box-shadow: 0 0 0 14px rgba(220,63,79,0.05), 0 16px 36px color-mix(in srgb, var(--danger) 28%, transparent); }
     }
     .record-status {
-      font-size: 12px;
+      font-size: 13px;
       color: var(--text-secondary);
       text-align: center;
     }
     .record-status.recording-state { color: var(--danger); }
-    .record-status.transcribing-state { color: var(--text-muted); }
+    .record-status.transcribing-state { color: var(--warning); }
     .record-timer {
       font-family: var(--font-mono);
-      font-size: 18px;
-      font-weight: 600;
-      color: var(--accent);
+      font-size: 20px;
+      font-weight: 650;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
     }
     .record-level-section {
-      padding: 0 20px 10px;
+      position: relative;
+      margin-top: 18px;
+      padding: 0;
     }
     .record-level-bar {
-      height: 6px;
+      height: 8px;
       background: var(--border);
-      border-radius: 3px;
+      border-radius: 999px;
       overflow: hidden;
     }
     .record-level-fill {
       height: 100%;
-      background: var(--accent);
-      border-radius: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--danger));
+      border-radius: 999px;
       transition: width 0.05s linear;
       width: 0%;
     }
+    .record-meta-grid {
+      display: grid;
+      grid-template-columns: 168px minmax(0, 1fr);
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .record-meta-card,
+    .record-preview-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface-raised);
+      box-shadow: var(--shadow);
+      padding: 12px;
+    }
+    .record-meta-label,
+    .record-preview-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .record-shortcut-value {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--text);
+    }
     .record-device-section {
-      padding: 0 20px 10px;
+      display: grid;
+      grid-template-columns: 96px minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+    }
+    .record-device-section .record-meta-label { margin-bottom: 0; }
+    .record-device-section select { min-width: 0; min-height: 36px; }
+    .record-preview-card { margin-top: 12px; }
+    .record-preview-text {
+      min-height: 38px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .record-preview-text.empty { color: var(--text-muted); }
+    @media (max-width: 620px) {
+      .record-meta-grid { grid-template-columns: 1fr; }
+      .record-header { flex-direction: column; }
+      .record-device-section { grid-template-columns: 1fr; align-items: stretch; }
+      .record-device-section .record-meta-label { margin-bottom: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
     }
 
     /* ── About View ── */
@@ -630,7 +978,7 @@
     <!-- Main: Sidebar + Content -->
     <div class="main">
       <!-- Sidebar -->
-      <div class="sidebar">
+      <div class="sidebar" role="navigation" aria-label="TypeX navigation">
         <button class="sidebar-btn active" id="nav-history">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/>
@@ -664,7 +1012,7 @@
       <div class="content">
         <!-- History View -->
         <div class="view active" id="view-history">
-          <div class="recording-indicator" id="recording-indicator" style="display:none;">
+          <div class="recording-indicator" id="recording-indicator" role="status" aria-live="polite" style="display:none;">
             <span class="recording-dot"></span>
             <span data-i18n="common.recording"></span>
           </div>
@@ -696,187 +1044,274 @@
 
         <!-- Record View -->
         <div class="view" id="view-record">
-          <div class="record-center">
-            <button class="record-btn" id="record-btn">
-              <svg class="record-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                <line x1="12" y1="19" x2="12" y2="23"/>
-                <line x1="8" y1="23" x2="16" y2="23"/>
-              </svg>
-            </button>
-            <div class="record-status" id="record-status" data-i18n="record.idle"></div>
-            <div class="record-timer" id="record-timer" style="display:none;">00:00</div>
-          </div>
+          <div class="record-shell">
+            <div class="record-hero">
+              <div class="record-header">
+                <div>
+                  <div class="record-kicker" data-i18n="record.kicker"></div>
+                  <div class="record-title" data-i18n="record.title"></div>
+                  <div class="record-subtitle" data-i18n="record.subtitle"></div>
+                </div>
+                <div class="record-state-pill" id="record-state-pill" role="status" aria-live="polite">
+                  <span class="record-state-dot"></span>
+                  <span id="record-state-label" data-i18n="record.ready"></span>
+                </div>
+              </div>
 
-          <!-- Audio level bar -->
-          <div class="record-level-section" id="record-level-section" style="display:none;">
-            <div class="record-level-bar">
-              <div class="record-level-fill" id="record-level-fill"></div>
+              <div class="record-center">
+                <button class="record-btn" id="record-btn" type="button">
+                  <svg class="record-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                    <line x1="12" y1="19" x2="12" y2="23"/>
+                    <line x1="8" y1="23" x2="16" y2="23"/>
+                  </svg>
+                </button>
+                <div class="record-status" id="record-status" data-i18n="record.idle"></div>
+                <div class="record-timer" id="record-timer" style="display:none;">00:00</div>
+              </div>
+
+              <div class="record-level-section" id="record-level-section" style="display:none;">
+                <div class="record-level-bar" aria-hidden="true">
+                  <div class="record-level-fill" id="record-level-fill"></div>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <!-- Audio device dropdown -->
-          <div class="record-device-section">
-            <div class="field-label" data-i18n="settings.audio_device"></div>
-            <select id="record-audio-device">
-              <!-- populated dynamically -->
-            </select>
+            <div class="record-meta-grid">
+              <div class="record-meta-card">
+                <div class="record-meta-label" data-i18n="record.shortcut"></div>
+                <div class="record-shortcut-value" id="record-shortcut-value">Ctrl+Alt+Space</div>
+              </div>
+              <div class="record-meta-card record-device-section">
+                <label class="record-meta-label" for="record-audio-device" data-i18n="settings.audio_device"></label>
+                <select id="record-audio-device">
+                  <!-- populated dynamically -->
+                </select>
+              </div>
+            </div>
+
+            <div class="record-preview-card">
+              <div class="record-preview-label" data-i18n="record.last_output"></div>
+              <div class="record-preview-text empty" id="record-last-output" data-i18n="record.last_output_empty"></div>
+            </div>
           </div>
         </div>
 
         <!-- Settings View -->
         <div class="view" id="view-settings">
-          <!-- Shortcut -->
+          <div class="settings-header">
+            <div>
+              <h1 class="page-title" data-i18n="settings.page_title"></h1>
+              <p class="page-subtitle" data-i18n="settings.page_subtitle"></p>
+            </div>
+            <div class="save-status" id="settings-save-status" role="status" aria-live="polite" data-i18n="settings.save_idle"></div>
+          </div>
+
+          <!-- Capture -->
           <div class="section">
-            <div class="section-title" data-i18n="settings.shortcut"></div>
+            <div class="section-title" data-i18n="settings.capture"></div>
+            <div class="section-desc" data-i18n="settings.capture_desc"></div>
             <div class="field">
-              <div class="field-label" data-i18n="settings.shortcut_record"></div>
-              <div class="shortcut-recorder" id="shortcut-recorder" tabindex="0">Ctrl+Alt+Space</div>
+              <label class="field-label" for="shortcut-recorder" data-i18n="settings.shortcut_record"></label>
+              <div class="shortcut-recorder" id="shortcut-recorder" tabindex="0" role="button" aria-describedby="shortcut-hint">Ctrl+Alt+Space</div>
               <div class="shortcut-hint" id="shortcut-hint" data-i18n="settings.shortcut_hint"></div>
             </div>
-          </div>
-
-          <!-- ASR -->
-          <div class="section">
-            <div class="section-title" data-i18n="settings.asr"></div>
             <div class="field">
-              <div class="field-label" data-i18n="settings.asr_provider"></div>
-              <select id="asr-provider">
-                <option value="openai-compatible">OpenAI Compatible</option>
-                <option value="mock">Mock</option>
+              <label class="field-label" for="audio-device" data-i18n="settings.audio_device"></label>
+              <select id="audio-device" aria-describedby="audio-device-help">
+                <!-- populated dynamically from list_audio_devices -->
               </select>
-            </div>
-            <div class="field">
-              <div class="field-label" data-i18n="settings.asr_endpoint"></div>
-              <input id="asr-endpoint" type="text" value="https://api.openai.com/v1" />
-            </div>
-            <div class="field">
-              <div class="field-label" data-i18n="settings.asr_api_key"></div>
-              <input id="asr-api-key" type="password" placeholder="sk-..." />
-            </div>
-            <div class="field">
-              <div class="field-label" data-i18n="settings.asr_model"></div>
-              <input id="asr-model" type="text" value="whisper-1" />
-            </div>
-            <div class="field">
-              <div class="field-label" data-i18n="settings.asr_language"></div>
-              <input id="asr-language" type="text" placeholder="en, zh, ja..." />
+              <div class="field-help" id="audio-device-help" data-i18n="settings.audio_device_help"></div>
             </div>
           </div>
 
-          <!-- LLM (conditional — details hidden when disabled) -->
+          <!-- Model Providers -->
           <div class="section">
-            <div class="section-title" data-i18n="settings.llm"></div>
-            <div class="toggle-row">
-              <label class="toggle">
-                <input type="checkbox" id="llm-enabled" />
-                <span class="slider"></span>
-              </label>
-              <span class="toggle-label" data-i18n="settings.llm_enabled"></span>
-            </div>
-            <div id="llm-details" style="display:none;">
+            <div class="section-title" data-i18n="settings.model_providers"></div>
+            <div class="section-desc" data-i18n="settings.model_providers_desc"></div>
+
+            <div class="settings-subsection">
+              <div class="subsection-title" data-i18n="settings.asr"></div>
               <div class="field">
-                <div class="field-label" data-i18n="settings.llm_provider"></div>
-                <select id="llm-provider">
-                  <option value="mock">Mock (passthrough)</option>
-                  <option value="openai-compatible">OpenAI-Compatible</option>
+                <label class="field-label" for="asr-provider" data-i18n="settings.asr_provider"></label>
+                <select id="asr-provider">
+                  <option value="openai-compatible">OpenAI Compatible</option>
+                  <option value="mock">Mock</option>
                 </select>
               </div>
               <div class="field">
-                <div class="field-label" data-i18n="settings.llm_endpoint"></div>
-                <input id="llm-endpoint" type="text" placeholder="http://..." />
+                <label class="field-label" for="asr-endpoint" data-i18n="settings.asr_endpoint"></label>
+                <input id="asr-endpoint" type="text" value="https://api.openai.com/v1" aria-describedby="asr-endpoint-help asr-endpoint-error" />
+                <div class="field-help" id="asr-endpoint-help" data-i18n="settings.endpoint_help"></div>
+                <div class="field-error" id="asr-endpoint-error" style="display:none;" data-i18n="settings.endpoint_error"></div>
               </div>
               <div class="field">
-                <div class="field-label" data-i18n="settings.llm_api_key"></div>
-                <input id="llm-api-key" type="password" placeholder="sk-..." />
+                <label class="field-label" for="asr-api-key" data-i18n="settings.asr_api_key"></label>
+                <input id="asr-api-key" type="password" placeholder="sk-..." aria-describedby="asr-api-key-help" />
+                <div class="field-help" id="asr-api-key-help" data-i18n="settings.api_key_help"></div>
               </div>
               <div class="field">
-                <div class="field-label" data-i18n="settings.llm_model"></div>
-                <input id="llm-model" type="text" placeholder="gpt-4o-mini" />
+                <label class="field-label" for="asr-model" data-i18n="settings.asr_model"></label>
+                <input id="asr-model" type="text" value="whisper-1" aria-describedby="asr-model-help" />
+                <div class="field-help" id="asr-model-help" data-i18n="settings.asr_model_help"></div>
               </div>
               <div class="field">
-                <div class="field-label" data-i18n="settings.llm_prompt"></div>
-                <textarea id="llm-prompt" rows="3" placeholder="Leave empty for sensible defaults"></textarea>
+                <label class="field-label" for="asr-language" data-i18n="settings.asr_language"></label>
+                <input id="asr-language" type="text" placeholder="en, zh, ja..." aria-describedby="asr-language-help" />
+                <div class="field-help" id="asr-language-help" data-i18n="settings.asr_language_help"></div>
               </div>
+            </div>
+
+            <div class="settings-subsection">
+              <div class="subsection-title" data-i18n="settings.llm_provider_settings"></div>
+              <div class="toggle-row">
+                <label class="toggle" for="llm-enabled">
+                  <input type="checkbox" id="llm-enabled" />
+                  <span class="slider"></span>
+                </label>
+                <div class="toggle-copy">
+                  <label class="toggle-label" for="llm-enabled" data-i18n="settings.llm_enabled"></label>
+                  <div class="field-help" data-i18n="settings.llm_enabled_help"></div>
+                </div>
+              </div>
+              <div id="llm-details">
+                <div class="field">
+                  <label class="field-label" for="llm-provider" data-i18n="settings.llm_provider"></label>
+                  <select id="llm-provider">
+                    <option value="mock">Mock (passthrough)</option>
+                    <option value="openai-compatible">OpenAI-Compatible</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="llm-endpoint" data-i18n="settings.llm_endpoint"></label>
+                  <input id="llm-endpoint" type="text" placeholder="http://..." aria-describedby="llm-endpoint-help llm-endpoint-error" />
+                  <div class="field-help" id="llm-endpoint-help" data-i18n="settings.endpoint_help"></div>
+                  <div class="field-error" id="llm-endpoint-error" style="display:none;" data-i18n="settings.endpoint_error"></div>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="llm-api-key" data-i18n="settings.llm_api_key"></label>
+                  <input id="llm-api-key" type="password" placeholder="sk-..." aria-describedby="llm-api-key-help" />
+                  <div class="field-help" id="llm-api-key-help" data-i18n="settings.api_key_help"></div>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="llm-model" data-i18n="settings.llm_model"></label>
+                  <input id="llm-model" type="text" placeholder="gpt-4o-mini" aria-describedby="llm-model-help" />
+                  <div class="field-help" id="llm-model-help" data-i18n="settings.llm_model_help"></div>
+                </div>
+              </div>
+              <div class="field-help" id="llm-disabled-help" data-i18n="settings.llm_disabled_advanced"></div>
             </div>
           </div>
 
-          <!-- Plugins + Injector + Performance -->
+          <!-- Appearance -->
           <div class="section">
-            <div class="section-title" data-i18n="settings.plugins"></div>
-            <div class="toggle-row">
-              <label class="toggle">
-                <input type="checkbox" id="plugin-filler" checked />
-                <span class="slider"></span>
-              </label>
-              <span class="toggle-label">filler_remover</span>
-            </div>
-            <div class="toggle-row">
-              <label class="toggle">
-                <input type="checkbox" id="plugin-sentence" checked />
-                <span class="slider"></span>
-              </label>
-              <span class="toggle-label">sentence_formatter</span>
-            </div>
-            <div class="toggle-row">
-              <label class="toggle">
-                <input type="checkbox" id="plugin-cleaner" checked />
-                <span class="slider"></span>
-              </label>
-              <span class="toggle-label">text_cleaner</span>
-            </div>
-            <hr style="border:none;border-top:1px solid var(--border);margin:8px 0;" />
+            <div class="section-title" data-i18n="settings.appearance"></div>
+            <div class="section-desc" data-i18n="settings.appearance_desc"></div>
             <div class="field">
-              <div class="field-label" data-i18n="settings.injector"></div>
-              <select id="injector-method">
-                <option value="clipboard">clipboard</option>
-                <option value="platform">platform</option>
+              <label class="field-label" for="ui-theme" data-i18n="settings.theme"></label>
+              <select id="ui-theme">
+                <option value="system" data-i18n="settings.theme_system"></option>
+                <option value="light" data-i18n="settings.theme_light"></option>
+                <option value="dark" data-i18n="settings.theme_dark"></option>
               </select>
             </div>
             <div class="field">
-              <div class="field-label" data-i18n="settings.performance"></div>
-              <select id="pipeline-performance">
-                <option value="low">low</option>
-                <option value="balanced">balanced</option>
-                <option value="high">high</option>
-              </select>
-              <div class="shortcut-hint" data-i18n="settings.performance_note" style="color:var(--text-muted);margin-top:3px;"></div>
-            </div>
-          </div>
-
-          <!-- Audio Device -->
-          <div class="section">
-            <div class="section-title" data-i18n="settings.audio_device"></div>
-            <div class="field">
-              <div class="field-label" data-i18n="settings.audio_device"></div>
-              <select id="audio-device">
-                <!-- populated dynamically from list_audio_devices -->
-              </select>
-            </div>
-          </div>
-
-          <!-- History -->
-          <div class="section">
-            <div class="section-title" data-i18n="settings.history"></div>
-            <div class="field">
-              <div class="field-label" data-i18n="settings.history_limit"></div>
-              <input id="history-log-limit" type="number" min="0" value="0" />
-            </div>
-          </div>
-
-          <!-- Language (UI) -->
-          <div class="section">
-            <div class="section-title" data-i18n="settings.language"></div>
-            <div class="field">
-              <div class="field-label" data-i18n="settings.language"></div>
+              <label class="field-label" for="ui-language" data-i18n="settings.language"></label>
               <select id="ui-language">
-                <option value="auto">auto</option>
+                <option value="auto" data-i18n="settings.language_auto"></option>
                 <option value="zh-CN">zh-CN</option>
                 <option value="en">en</option>
               </select>
             </div>
           </div>
+
+          <!-- Output -->
+          <div class="section">
+            <div class="section-title" data-i18n="settings.output"></div>
+            <div class="section-desc" data-i18n="settings.output_desc"></div>
+            <div class="field">
+              <label class="field-label" for="injector-method" data-i18n="settings.injector"></label>
+              <select id="injector-method">
+                <option value="clipboard" data-i18n="settings.injector_clipboard"></option>
+                <option value="platform" data-i18n="settings.injector_platform"></option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="history-log-limit" data-i18n="settings.history_limit"></label>
+              <input id="history-log-limit" type="number" min="0" value="0" aria-describedby="history-log-limit-help" />
+              <div class="field-help" id="history-log-limit-help" data-i18n="settings.history_limit_help"></div>
+            </div>
+          </div>
+
+          <!-- Advanced -->
+          <details class="section advanced-section" id="settings-advanced">
+            <summary class="advanced-summary">
+              <div class="advanced-summary-copy">
+                <div class="section-title" data-i18n="settings.advanced"></div>
+                <div class="section-desc" data-i18n="settings.advanced_desc"></div>
+              </div>
+              <span class="advanced-chevron" aria-hidden="true"></span>
+            </summary>
+            <div class="advanced-content">
+              <div class="settings-subsection">
+                <div class="subsection-title" data-i18n="settings.llm_prompt"></div>
+                <div class="field">
+                  <label class="field-label" for="llm-prompt" data-i18n="settings.llm_prompt"></label>
+                  <textarea id="llm-prompt" rows="3" data-i18n-placeholder="settings.llm_prompt_placeholder" aria-describedby="llm-prompt-help"></textarea>
+                  <div class="field-help" id="llm-prompt-help" data-i18n="settings.llm_prompt_help"></div>
+                </div>
+              </div>
+
+              <div class="settings-subsection">
+                <div class="subsection-title" data-i18n="settings.plugins"></div>
+                <div class="section-desc" data-i18n="settings.plugins_desc"></div>
+                <div class="toggle-row">
+                  <label class="toggle" for="plugin-filler">
+                    <input type="checkbox" id="plugin-filler" checked />
+                    <span class="slider"></span>
+                  </label>
+                  <div class="toggle-copy">
+                    <label class="toggle-label" for="plugin-filler" data-i18n="settings.plugin_filler_label"></label>
+                    <div class="field-help">filler_remover</div>
+                  </div>
+                </div>
+                <div class="toggle-row">
+                  <label class="toggle" for="plugin-sentence">
+                    <input type="checkbox" id="plugin-sentence" checked />
+                    <span class="slider"></span>
+                  </label>
+                  <div class="toggle-copy">
+                    <label class="toggle-label" for="plugin-sentence" data-i18n="settings.plugin_sentence_label"></label>
+                    <div class="field-help">sentence_formatter</div>
+                  </div>
+                </div>
+                <div class="toggle-row">
+                  <label class="toggle" for="plugin-cleaner">
+                    <input type="checkbox" id="plugin-cleaner" checked />
+                    <span class="slider"></span>
+                  </label>
+                  <div class="toggle-copy">
+                    <label class="toggle-label" for="plugin-cleaner" data-i18n="settings.plugin_cleaner_label"></label>
+                    <div class="field-help">text_cleaner</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-subsection">
+                <div class="subsection-title" data-i18n="settings.performance"></div>
+                <div class="field">
+                  <label class="field-label" for="pipeline-performance" data-i18n="settings.performance"></label>
+                  <select id="pipeline-performance">
+                    <option value="low" data-i18n="settings.performance_low"></option>
+                    <option value="balanced" data-i18n="settings.performance_balanced"></option>
+                    <option value="high" data-i18n="settings.performance_high"></option>
+                  </select>
+                  <div class="field-help" data-i18n="settings.performance_note"></div>
+                </div>
+              </div>
+            </div>
+          </details>
 
           <div class="footer">BSL-1.1 · Non-commercial use</div>
         </div>
@@ -917,7 +1352,7 @@
   </div>
 
   <!-- Delete Confirmation Modal -->
-  <div class="modal-overlay" id="delete-modal" style="display:none;">
+      <div class="modal-overlay" id="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title" style="display:none;">
     <div class="modal">
       <div class="modal-title" id="delete-modal-title" data-i18n="history.confirm_delete_title"></div>
       <div class="modal-body" id="delete-modal-body"></div>
@@ -943,7 +1378,11 @@
     function switchView(view) {
       const idx = viewIds.indexOf('view-' + view);
       navBtns.forEach((id, i) => {
-        document.getElementById(id).classList.toggle('active', i === idx);
+        const btn = document.getElementById(id);
+        const active = i === idx;
+        btn.classList.toggle('active', active);
+        if (active) btn.setAttribute('aria-current', 'page');
+        else btn.removeAttribute('aria-current');
       });
       viewIds.forEach((id, i) => {
         document.getElementById(id).classList.toggle('active', i === idx);
@@ -957,6 +1396,32 @@
       const viewName = viewIds[i].replace('view-', '');
       document.getElementById(id).addEventListener('click', () => switchView(viewName));
     });
+    document.getElementById('nav-history').setAttribute('aria-current', 'page');
+
+    function applyDynamicLabels() {
+      document.querySelector('.sidebar')?.setAttribute('aria-label', typexI18n.t('aria.navigation'));
+      document.getElementById('btn-minimize').setAttribute('aria-label', typexI18n.t('aria.minimize'));
+      document.getElementById('btn-close').setAttribute('aria-label', typexI18n.t('aria.close'));
+      document.getElementById('shortcut-recorder').setAttribute('aria-label', typexI18n.t('aria.shortcut_recorder'));
+      document.getElementById('history-search').setAttribute('aria-label', typexI18n.t('aria.history_search'));
+      document.getElementById('delete-modal').setAttribute('aria-label', typexI18n.t('aria.delete_dialog'));
+      updateRecordButtonA11y();
+    }
+
+    function updateRecordButtonA11y() {
+      const btn = document.getElementById('record-btn');
+      if (!btn) return;
+      if (btn.classList.contains('recording')) {
+        btn.setAttribute('aria-label', typexI18n.t('record.stop'));
+        btn.removeAttribute('aria-disabled');
+      } else if (btn.classList.contains('transcribing')) {
+        btn.setAttribute('aria-label', typexI18n.t('record.transcribing'));
+        btn.setAttribute('aria-disabled', 'true');
+      } else {
+        btn.setAttribute('aria-label', typexI18n.t('record.start'));
+        btn.removeAttribute('aria-disabled');
+      }
+    }
 
     // ── Shortcut Recorder (declared before loadConfig uses it) ──
     const shortcutRecorder = document.getElementById('shortcut-recorder');
@@ -965,13 +1430,66 @@
 
     // ── Config ──
     let currentConfig = null;
+    let saveSeq = 0;
+    let saveStatusTimer = null;
+    let saveDebounceTimer = null;
+    const saveStatusEl = document.getElementById('settings-save-status');
+
+    function setSaveStatus(state, keyOrText) {
+      if (!saveStatusEl) return;
+      clearTimeout(saveStatusTimer);
+      saveStatusEl.classList.remove('saving', 'saved', 'error');
+      if (state) saveStatusEl.classList.add(state);
+      saveStatusEl.textContent = keyOrText ? typexI18n.t(keyOrText) : '';
+      if (state === 'saved') {
+        saveStatusTimer = setTimeout(() => {
+          saveStatusEl.classList.remove('saved');
+          saveStatusEl.textContent = typexI18n.t('settings.save_idle');
+        }, 1800);
+      }
+    }
+
+    function isValidEndpoint(value) {
+      const trimmed = value.trim();
+      return !trimmed || trimmed.startsWith('http://') || trimmed.startsWith('https://');
+    }
+
+    function setFieldError(inputId, errorId, hasError) {
+      const input = document.getElementById(inputId);
+      const error = document.getElementById(errorId);
+      if (!input || !error) return;
+      input.setAttribute('aria-invalid', hasError ? 'true' : 'false');
+      error.style.display = hasError ? 'block' : 'none';
+    }
+
+    function validateSettings() {
+      const asrEndpointInvalid = !isValidEndpoint(document.getElementById('asr-endpoint').value);
+      const llmEndpointInvalid = llmEnabledCheckbox.checked && !isValidEndpoint(document.getElementById('llm-endpoint').value);
+      setFieldError('asr-endpoint', 'asr-endpoint-error', asrEndpointInvalid);
+      setFieldError('llm-endpoint', 'llm-endpoint-error', llmEndpointInvalid);
+      return !asrEndpointInvalid && !llmEndpointInvalid;
+    }
+
+    function applyTheme(theme) {
+      const value = ['system', 'light', 'dark'].includes(theme) ? theme : 'system';
+      document.documentElement.dataset.theme = value;
+    }
+
+    function scheduleSaveConfig() {
+      clearTimeout(saveDebounceTimer);
+      setSaveStatus('saving', 'settings.save_saving');
+      saveDebounceTimer = setTimeout(() => saveConfig(), 500);
+    }
 
     // ── LLM toggle visibility ──
     const llmEnabledCheckbox = document.getElementById('llm-enabled');
     const llmDetails = document.getElementById('llm-details');
+    const llmDisabledHelp = document.getElementById('llm-disabled-help');
 
     function updateLlmVisibility() {
-      llmDetails.style.display = llmEnabledCheckbox.checked ? 'block' : 'none';
+      const enabled = llmEnabledCheckbox.checked;
+      llmDetails.style.display = enabled ? 'block' : 'none';
+      if (llmDisabledHelp) llmDisabledHelp.style.display = enabled ? 'none' : 'block';
     }
 
     llmEnabledCheckbox.addEventListener('change', () => {
@@ -1010,7 +1528,7 @@
       const audioSelect = document.getElementById('audio-device');
       try {
         const devices = await invoke('list_audio_devices');
-        audioSelect.innerHTML = '<option value="">default</option>';
+        audioSelect.innerHTML = `<option value="">${typexI18n.t('settings.audio_device_default')}</option>`;
         devices.forEach(name => {
           const opt = document.createElement('option');
           opt.value = name;
@@ -1018,22 +1536,34 @@
           if (name === (currentConfig.audio.device || '')) opt.selected = true;
           audioSelect.appendChild(opt);
         });
-      } catch { audioSelect.innerHTML = '<option value="">default</option>'; }
+      } catch { audioSelect.innerHTML = `<option value="">${typexI18n.t('settings.audio_device_default')}</option>`; }
 
-      // Language dropdown
+      // Language and theme dropdowns
       document.getElementById('ui-language').value = currentConfig.ui.language || 'auto';
+      const theme = currentConfig.ui.theme || 'system';
+      document.getElementById('ui-theme').value = theme;
+      applyTheme(theme);
 
       if (!shortcutListening) {
         shortcutRecorder.textContent = currentConfig.shortcut.record;
       }
+      document.getElementById('record-shortcut-value').textContent = currentConfig.shortcut.record;
 
       // Apply i18n to all data-i18n elements after config loads
       typexI18n.applyAll();
+      applyDynamicLabels();
+      setSaveStatus(null, 'settings.save_idle');
+      validateSettings();
     }
 
     async function saveConfig() {
-      if (!currentConfig) return;
-
+      if (!currentConfig) return false;
+      if (!validateSettings()) {
+        setSaveStatus('error', 'settings.save_invalid');
+        return false;
+      }
+      const seq = ++saveSeq;
+      setSaveStatus('saving', 'settings.save_saving');
       currentConfig.asr.provider = document.getElementById('asr-provider').value;
       currentConfig.asr.endpoint = document.getElementById('asr-endpoint').value || null;
       currentConfig.asr.api_key = document.getElementById('asr-api-key').value || null;
@@ -1057,27 +1587,37 @@
       currentConfig.injector.method = document.getElementById('injector-method').value || 'clipboard';
       currentConfig.audio.device = document.getElementById('audio-device').value || null;
       currentConfig.history.log_limit = Math.max(0, parseInt(document.getElementById('history-log-limit').value) || 0);
+      currentConfig.ui.theme = document.getElementById('ui-theme').value || 'system';
 
       // Language is handled separately by set_language, don't include it in saveConfig
 
       try {
         await invoke('save_config', { config: currentConfig });
+        if (seq === saveSeq) setSaveStatus('saved', 'settings.save_saved');
+        return true;
       } catch (e) {
         console.error('Failed to save config:', e);
+        if (seq === saveSeq) setSaveStatus('error', 'settings.save_error');
+        return false;
       }
     }
 
     // ── Language change handler (separate from saveConfig) ──
     document.getElementById('ui-language').addEventListener('change', async () => {
       const newLang = document.getElementById('ui-language').value;
+      const seq = ++saveSeq;
+      setSaveStatus('saving', 'settings.save_saving');
       try {
         await invoke('set_language', { language: newLang });
         const lang = newLang === 'auto' ? undefined : newLang;
         await typexI18n.init(lang);
         // loadConfig will also call applyAll, but we want immediate UI refresh
         if (currentConfig) currentConfig.ui.language = newLang;
+        applyDynamicLabels();
+        if (seq === saveSeq) setSaveStatus('saved', 'settings.save_saved');
       } catch (e) {
         console.error('Failed to set language:', e);
+        if (seq === saveSeq) setSaveStatus('error', 'settings.save_error');
       }
     });
 
@@ -1088,6 +1628,9 @@
         if (el.id === 'audio-device') {
           document.getElementById('record-audio-device').value = el.value;
         }
+        if (el.id === 'ui-theme') {
+          applyTheme(el.value);
+        }
         saveConfig();
       });
     });
@@ -1097,7 +1640,8 @@
         if (el.id === 'audio-device') {
           document.getElementById('record-audio-device').value = el.value;
         }
-        saveConfig();
+        validateSettings();
+        scheduleSaveConfig();
       });
     });
 
@@ -1147,6 +1691,7 @@
       list.innerHTML = '';
       empty.style.display = entries.length ? 'none' : 'flex';
       footer.style.display = entries.length ? 'flex' : 'none';
+      updateRecordPreview(entries);
 
       entries.forEach(entry => {
         const item = document.createElement('div');
@@ -1168,13 +1713,28 @@
         const content = document.createElement('div');
         content.className = 'history-item-content';
         content.innerHTML = `
-          ${entry.pinned ? '<div class="history-item-pinned">📌</div>' : ''}
+          ${entry.pinned ? `<div class="history-item-pinned">${typexI18n.t('history.pinned')}</div>` : ''}
           <div class="history-time">${formatTime(entry.created_at)}</div>
           <div class="history-text truncated">${escapeHtml(entry.text)}</div>
+          <div class="history-actions">
+            <button class="btn-action" type="button" data-action="copy">${typexI18n.t('history.copy')}</button>
+            <button class="btn-action" type="button" data-action="pin">${typexI18n.t(entry.pinned ? 'history.unpin' : 'history.pin')}</button>
+          </div>
         `;
         const textEl = content.querySelector('.history-text');
-        content.addEventListener('click', (e) => {
+        content.addEventListener('click', async (e) => {
           if (e.target === checkbox) return;
+          const action = e.target?.dataset?.action;
+          if (action === 'copy') {
+            e.stopPropagation();
+            await copyText(entry.text);
+            return;
+          }
+          if (action === 'pin') {
+            e.stopPropagation();
+            await togglePin(entry.id);
+            return;
+          }
           textEl.classList.toggle('truncated');
         });
 
@@ -1212,6 +1772,34 @@
       return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
 
+    async function copyText(text) {
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch (err) {
+          console.error('Failed to copy text:', err);
+        }
+      }
+    }
+
+    async function togglePin(id) {
+      const entries = await invoke('toggle_pin_history', { id });
+      renderHistory(entries);
+    }
+
+    function updateRecordPreview(entries) {
+      const preview = document.getElementById('record-last-output');
+      if (!preview) return;
+      const latest = entries?.[0];
+      if (!latest) {
+        preview.classList.add('empty');
+        preview.textContent = typexI18n.t('record.last_output_empty');
+        return;
+      }
+      preview.classList.remove('empty');
+      preview.textContent = latest.text;
+    }
+
     let historySeq = 0;
     async function loadHistory() {
       const seq = ++historySeq;
@@ -1239,9 +1827,11 @@
 
     // ── Delete confirmation modal ──
     let pendingDeleteAction = null; // 'selected' | 'all'
+    let modalReturnFocus = null;
 
     function showDeleteModal(type) {
       pendingDeleteAction = type;
+      modalReturnFocus = document.activeElement;
       const modal = document.getElementById('delete-modal');
       const title = document.getElementById('delete-modal-title');
       const body = document.getElementById('delete-modal-body');
@@ -1267,12 +1857,21 @@
       document.getElementById('delete-modal-confirm').textContent = typexI18n.t('history.confirm_delete');
       document.getElementById('delete-modal-cancel').textContent = typexI18n.t('history.confirm_cancel');
       modal.style.display = 'flex';
+      document.getElementById('delete-modal-cancel').focus();
     }
 
     function hideDeleteModal() {
       document.getElementById('delete-modal').style.display = 'none';
       pendingDeleteAction = null;
+      if (modalReturnFocus && typeof modalReturnFocus.focus === 'function') modalReturnFocus.focus();
+      modalReturnFocus = null;
     }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Escape' && document.getElementById('delete-modal').style.display !== 'none') {
+        hideDeleteModal();
+      }
+    });
 
     document.getElementById('delete-modal-cancel').addEventListener('click', hideDeleteModal);
     document.getElementById('delete-modal-confirm').addEventListener('click', async () => {
@@ -1340,14 +1939,24 @@
       return parts.join('+');
     }
 
-    shortcutRecorder.addEventListener('click', () => {
+    function startShortcutListening() {
       shortcutListening = true;
-      shortcutRecorder.textContent = 'Press shortcut...';
+      shortcutRecorder.textContent = typexI18n.t('settings.shortcut_press');
       shortcutRecorder.classList.add('listening');
       shortcutRecorder.classList.remove('conflict');
       shortcutHint.textContent = '';
       shortcutHint.classList.remove('error', 'success');
       shortcutRecorder.focus();
+    }
+
+    shortcutRecorder.addEventListener('click', startShortcutListening);
+    shortcutRecorder.addEventListener('keydown', (e) => {
+      if (shortcutListening) return;
+      if (e.code === 'Enter' || e.code === 'Space') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        startShortcutListening();
+      }
     });
 
     // Listen for keydown on the recorder element while in listening mode
@@ -1390,6 +1999,7 @@
       invoke('update_shortcut', { shortcut }).then(() => {
         if (currentConfig) currentConfig.shortcut.record = shortcut;
         shortcutRecorder.textContent = shortcut;
+        document.getElementById('record-shortcut-value').textContent = shortcut;
         shortcutHint.textContent = typexI18n.t('settings.shortcut_saved');
         shortcutHint.classList.add('success');
         shortcutHint.classList.remove('error');
@@ -1433,6 +2043,8 @@
     const recordBtn = document.getElementById('record-btn');
     const recordStatus = document.getElementById('record-status');
     const recordTimer = document.getElementById('record-timer');
+    const recordStatePill = document.getElementById('record-state-pill');
+    const recordStateLabel = document.getElementById('record-state-label');
     const recordLevelSection = document.getElementById('record-level-section');
     const recordLevelFill = document.getElementById('record-level-fill');
     let recordingState = 'idle'; // 'idle' | 'recording' | 'transcribing'
@@ -1443,27 +2055,34 @@
       recordingState = state;
       recordBtn.classList.remove('recording', 'transcribing');
       recordStatus.classList.remove('recording-state', 'transcribing-state');
+      recordStatePill.classList.remove('recording-state', 'transcribing-state');
 
       if (state === 'idle') {
         recordBtn.classList.remove('recording', 'transcribing');
         recordStatus.textContent = typexI18n.t('record.idle');
+        recordStateLabel.textContent = typexI18n.t('record.ready');
         recordTimer.style.display = 'none';
         recordLevelSection.style.display = 'none';
         stopTimer();
       } else if (state === 'recording') {
         recordBtn.classList.add('recording');
         recordStatus.classList.add('recording-state');
+        recordStatePill.classList.add('recording-state');
         recordStatus.textContent = typexI18n.t('record.recording');
+        recordStateLabel.textContent = typexI18n.t('record.listening');
         recordTimer.style.display = 'block';
         recordLevelSection.style.display = 'block';
         startTimer();
       } else if (state === 'transcribing') {
         recordBtn.classList.add('transcribing');
         recordStatus.classList.add('transcribing-state');
+        recordStatePill.classList.add('transcribing-state');
         recordStatus.textContent = typexI18n.t('record.transcribing');
+        recordStateLabel.textContent = typexI18n.t('record.processing');
         recordLevelSection.style.display = 'none';
         stopTimer();
       }
+      updateRecordButtonA11y();
     }
 
     function startTimer() {
@@ -1493,7 +2112,7 @@
       try {
         const devices = await invoke('list_audio_devices');
         const currentDevice = currentConfig ? (currentConfig.audio.device || '') : '';
-        select.innerHTML = '<option value="">default</option>';
+        select.innerHTML = `<option value="">${typexI18n.t('settings.audio_device_default')}</option>`;
         devices.forEach(name => {
           const opt = document.createElement('option');
           opt.value = name;
@@ -1501,13 +2120,13 @@
           if (name === currentDevice) opt.selected = true;
           select.appendChild(opt);
         });
-      } catch { select.innerHTML = '<option value="">default</option>'; }
+      } catch { select.innerHTML = `<option value="">${typexI18n.t('settings.audio_device_default')}</option>`; }
     }
 
     // Audio device change in recording view → sync to settings
     document.getElementById('record-audio-device').addEventListener('change', (e) => {
       document.getElementById('audio-device').value = e.target.value;
-      document.getElementById('audio-device').dispatchEvent(new Event('change'));
+      document.getElementById('audio-device').dispatchEvent(new Event('change', { bubbles: true }));
     });
 
     // Audio level from main window Tauri event
