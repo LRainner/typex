@@ -1774,7 +1774,11 @@
 
     async function copyText(text) {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch (err) {
+          console.error('Failed to copy text:', err);
+        }
       }
     }
 
