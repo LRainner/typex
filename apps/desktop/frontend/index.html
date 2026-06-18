@@ -1514,7 +1514,7 @@
     }
 
     function createConnectionId(prefix) {
-      if (crypto?.randomUUID) return `${prefix}-${crypto.randomUUID()}`;
+      if (window.crypto?.randomUUID) return `${prefix}-${window.crypto.randomUUID()}`;
       return `${prefix}-${Date.now()}`;
     }
 

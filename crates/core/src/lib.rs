@@ -65,7 +65,7 @@ fn create_asr_provider(config: &AppConfig) -> anyhow::Result<Arc<dyn AsrProvider
         .active_connection_config()
         .ok_or_else(|| anyhow::anyhow!("active ASR connection not found"))?;
 
-    match connection.provider.as_str() {
+    match connection.provider.trim() {
         "mock" => Ok(Arc::new(typex_asr::mock::MockAsrProvider::new())),
         "openai-compatible" | "" => {
             let endpoint = connection
@@ -98,8 +98,13 @@ fn create_asr_provider(config: &AppConfig) -> anyhow::Result<Arc<dyn AsrProvider
                 model.to_string(),
             );
 
-            if let Some(lang) = &connection.language {
-                provider = provider.with_language(lang.clone());
+            if let Some(lang) = connection
+                .language
+                .as_deref()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+            {
+                provider = provider.with_language(lang.to_string());
             }
 
             Ok(Arc::new(provider))
@@ -118,7 +123,7 @@ fn create_llm_provider(config: &AppConfig) -> anyhow::Result<Option<Arc<dyn LlmP
         .active_connection_config()
         .ok_or_else(|| anyhow::anyhow!("active LLM connection not found"))?;
 
-    match connection.provider.as_str() {
+    match connection.provider.trim() {
         "mock" | "" => Ok(Some(Arc::new(typex_llm::mock::MockLlmProvider::new()))),
         "openai-compatible" => {
             let endpoint = connection
