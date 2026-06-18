@@ -60,16 +60,19 @@ pub fn build_typex_from_config(
 }
 
 fn create_asr_provider(config: &AppConfig) -> anyhow::Result<Arc<dyn AsrProvider>> {
-    match config.asr.provider.as_str() {
+    let connection = config
+        .asr
+        .active_connection_config()
+        .ok_or_else(|| anyhow::anyhow!("active ASR connection not found"))?;
+
+    match connection.provider.as_str() {
         "mock" => Ok(Arc::new(typex_asr::mock::MockAsrProvider::new())),
         "openai-compatible" | "" => {
-            let endpoint = config
-                .asr
+            let endpoint = connection
                 .endpoint
                 .as_deref()
                 .unwrap_or("https://api.openai.com/v1");
-            let api_key = config
-                .asr
+            let api_key = connection
                 .api_key
                 .clone()
                 .map(|s| s.trim().to_string())
@@ -80,7 +83,7 @@ fn create_asr_provider(config: &AppConfig) -> anyhow::Result<Arc<dyn AsrProvider
                         .map(|s| s.trim().to_string())
                         .filter(|s| !s.is_empty())
                 });
-            let model = config.asr.model.as_deref().unwrap_or("whisper-1");
+            let model = connection.model.as_deref().unwrap_or("whisper-1");
 
             let mut provider = typex_asr::openai_compat::OpenAiCompatibleAsrProvider::new(
                 endpoint.to_string(),
@@ -88,7 +91,7 @@ fn create_asr_provider(config: &AppConfig) -> anyhow::Result<Arc<dyn AsrProvider
                 model.to_string(),
             );
 
-            if let Some(lang) = &config.asr.language {
+            if let Some(lang) = &connection.language {
                 provider = provider.with_language(lang.clone());
             }
 
@@ -103,16 +106,19 @@ fn create_llm_provider(config: &AppConfig) -> anyhow::Result<Option<Arc<dyn LlmP
         return Ok(None);
     }
 
-    match config.llm.provider.as_str() {
+    let connection = config
+        .llm
+        .active_connection_config()
+        .ok_or_else(|| anyhow::anyhow!("active LLM connection not found"))?;
+
+    match connection.provider.as_str() {
         "mock" | "" => Ok(Some(Arc::new(typex_llm::mock::MockLlmProvider::new()))),
         "openai-compatible" => {
-            let endpoint = config
-                .llm
+            let endpoint = connection
                 .endpoint
                 .as_deref()
                 .unwrap_or("https://api.openai.com/v1");
-            let api_key = config
-                .llm
+            let api_key = connection
                 .api_key
                 .clone()
                 .map(|s| s.trim().to_string())
@@ -124,7 +130,7 @@ fn create_llm_provider(config: &AppConfig) -> anyhow::Result<Option<Arc<dyn LlmP
                         .filter(|s| !s.is_empty())
                 });
 
-            let model = config.llm.model.as_deref().unwrap_or("gpt-4o-mini");
+            let model = connection.model.as_deref().unwrap_or("gpt-4o-mini");
 
             let has_key = api_key.is_some();
             tracing::info!(

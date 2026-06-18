@@ -360,6 +360,28 @@
       text-transform: uppercase;
       margin-bottom: 10px;
     }
+    .connection-toolbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: end;
+      margin-bottom: 12px;
+    }
+    .connection-toolbar .field {
+      margin-bottom: 0;
+    }
+    .connection-actions {
+      display: flex;
+      gap: 6px;
+      padding-bottom: 0;
+    }
+    .connection-actions .btn-action {
+      min-height: 36px;
+      white-space: nowrap;
+    }
+    .connection-name-row {
+      margin-bottom: 12px;
+    }
 
     /* ── Form ── */
     .field { margin-bottom: 12px; }
@@ -1132,7 +1154,21 @@
             <div class="section-desc" data-i18n="settings.model_providers_desc"></div>
 
             <div class="settings-subsection">
-              <div class="subsection-title" data-i18n="settings.asr"></div>
+              <div class="subsection-title" data-i18n="settings.asr_connections"></div>
+              <div class="connection-toolbar">
+                <div class="field">
+                  <label class="field-label" for="asr-connection-select" data-i18n="settings.active_connection"></label>
+                  <select id="asr-connection-select"></select>
+                </div>
+                <div class="connection-actions">
+                  <button class="btn-action" type="button" id="asr-connection-add" data-i18n="settings.add_connection"></button>
+                  <button class="btn-action danger" type="button" id="asr-connection-delete" data-i18n="settings.delete_connection"></button>
+                </div>
+              </div>
+              <div class="field connection-name-row">
+                <label class="field-label" for="asr-connection-name" data-i18n="settings.connection_name"></label>
+                <input id="asr-connection-name" type="text" />
+              </div>
               <div class="field">
                 <label class="field-label" for="asr-provider" data-i18n="settings.asr_provider"></label>
                 <select id="asr-provider">
@@ -1176,6 +1212,21 @@
                 </div>
               </div>
               <div id="llm-details">
+                <div class="subsection-title" data-i18n="settings.llm_connections"></div>
+                <div class="connection-toolbar">
+                  <div class="field">
+                    <label class="field-label" for="llm-connection-select" data-i18n="settings.active_connection"></label>
+                    <select id="llm-connection-select"></select>
+                  </div>
+                  <div class="connection-actions">
+                    <button class="btn-action" type="button" id="llm-connection-add" data-i18n="settings.add_connection"></button>
+                    <button class="btn-action danger" type="button" id="llm-connection-delete" data-i18n="settings.delete_connection"></button>
+                  </div>
+                </div>
+                <div class="field connection-name-row">
+                  <label class="field-label" for="llm-connection-name" data-i18n="settings.connection_name"></label>
+                  <input id="llm-connection-name" type="text" />
+                </div>
                 <div class="field">
                   <label class="field-label" for="llm-provider" data-i18n="settings.llm_provider"></label>
                   <select id="llm-provider">
@@ -1462,6 +1513,138 @@
       error.style.display = hasError ? 'block' : 'none';
     }
 
+    function createConnectionId(prefix) {
+      if (crypto?.randomUUID) return `${prefix}-${crypto.randomUUID()}`;
+      return `${prefix}-${Date.now()}`;
+    }
+
+    function ensureConnectionShape() {
+      if (!currentConfig.asr) currentConfig.asr = {};
+      if (!Array.isArray(currentConfig.asr.connections) || currentConfig.asr.connections.length === 0) {
+        const id = currentConfig.asr.active_connection || 'default';
+        currentConfig.asr.connections = [{
+          id,
+          name: typexI18n.t('settings.default_asr_connection'),
+          provider: currentConfig.asr.provider || 'mock',
+          endpoint: currentConfig.asr.endpoint || null,
+          api_key: currentConfig.asr.api_key || null,
+          model: currentConfig.asr.model || null,
+          language: currentConfig.asr.language || null,
+        }];
+        currentConfig.asr.active_connection = id;
+      }
+      if (!currentConfig.asr.active_connection || !currentConfig.asr.connections.some(c => c.id === currentConfig.asr.active_connection)) {
+        currentConfig.asr.active_connection = currentConfig.asr.connections[0].id;
+      }
+
+      if (!currentConfig.llm) currentConfig.llm = {};
+      if (!Array.isArray(currentConfig.llm.connections) || currentConfig.llm.connections.length === 0) {
+        const id = currentConfig.llm.active_connection || 'default';
+        currentConfig.llm.connections = [{
+          id,
+          name: typexI18n.t('settings.default_llm_connection'),
+          provider: currentConfig.llm.provider || 'mock',
+          endpoint: currentConfig.llm.endpoint || null,
+          api_key: currentConfig.llm.api_key || null,
+          model: currentConfig.llm.model || null,
+        }];
+        currentConfig.llm.active_connection = id;
+      }
+      if (!currentConfig.llm.active_connection || !currentConfig.llm.connections.some(c => c.id === currentConfig.llm.active_connection)) {
+        currentConfig.llm.active_connection = currentConfig.llm.connections[0].id;
+      }
+    }
+
+    function getActiveAsrConnection() {
+      ensureConnectionShape();
+      return currentConfig.asr.connections.find(c => c.id === currentConfig.asr.active_connection) || currentConfig.asr.connections[0];
+    }
+
+    function getActiveLlmConnection() {
+      ensureConnectionShape();
+      return currentConfig.llm.connections.find(c => c.id === currentConfig.llm.active_connection) || currentConfig.llm.connections[0];
+    }
+
+    function renderConnectionOptions(selectId, connections, activeId) {
+      const select = document.getElementById(selectId);
+      select.innerHTML = '';
+      connections.forEach(connection => {
+        const opt = document.createElement('option');
+        opt.value = connection.id;
+        opt.textContent = connection.name || connection.id;
+        if (connection.id === activeId) opt.selected = true;
+        select.appendChild(opt);
+      });
+      select.dataset.previous = activeId;
+    }
+
+    function renderAsrConnections() {
+      ensureConnectionShape();
+      renderConnectionOptions('asr-connection-select', currentConfig.asr.connections, currentConfig.asr.active_connection);
+      document.getElementById('asr-connection-delete').disabled = currentConfig.asr.connections.length <= 1;
+    }
+
+    function renderLlmConnections() {
+      ensureConnectionShape();
+      renderConnectionOptions('llm-connection-select', currentConfig.llm.connections, currentConfig.llm.active_connection);
+      document.getElementById('llm-connection-delete').disabled = currentConfig.llm.connections.length <= 1;
+    }
+
+    function loadAsrConnectionFields(connection) {
+      document.getElementById('asr-connection-name').value = connection.name || '';
+      document.getElementById('asr-provider').value = connection.provider || 'mock';
+      document.getElementById('asr-endpoint').value = connection.endpoint || '';
+      document.getElementById('asr-api-key').value = connection.api_key || '';
+      document.getElementById('asr-model').value = connection.model || '';
+      document.getElementById('asr-language').value = connection.language || '';
+    }
+
+    function loadLlmConnectionFields(connection) {
+      document.getElementById('llm-connection-name').value = connection.name || '';
+      document.getElementById('llm-provider').value = connection.provider || 'mock';
+      document.getElementById('llm-endpoint').value = connection.endpoint || '';
+      document.getElementById('llm-api-key').value = connection.api_key || '';
+      document.getElementById('llm-model').value = connection.model || '';
+    }
+
+    function saveAsrConnectionFields(connectionId = currentConfig.asr.active_connection) {
+      ensureConnectionShape();
+      const connection = currentConfig.asr.connections.find(c => c.id === connectionId);
+      if (!connection) return;
+      connection.name = document.getElementById('asr-connection-name').value || connection.id;
+      connection.provider = document.getElementById('asr-provider').value || 'mock';
+      connection.endpoint = document.getElementById('asr-endpoint').value || null;
+      connection.api_key = document.getElementById('asr-api-key').value || null;
+      connection.model = document.getElementById('asr-model').value || null;
+      connection.language = document.getElementById('asr-language').value || null;
+    }
+
+    function saveLlmConnectionFields(connectionId = currentConfig.llm.active_connection) {
+      ensureConnectionShape();
+      const connection = currentConfig.llm.connections.find(c => c.id === connectionId);
+      if (!connection) return;
+      connection.name = document.getElementById('llm-connection-name').value || connection.id;
+      connection.provider = document.getElementById('llm-provider').value || 'mock';
+      connection.endpoint = document.getElementById('llm-endpoint').value || null;
+      connection.api_key = document.getElementById('llm-api-key').value || null;
+      connection.model = document.getElementById('llm-model').value || null;
+    }
+
+    function syncLegacyProviderFields() {
+      const asr = getActiveAsrConnection();
+      currentConfig.asr.provider = asr.provider;
+      currentConfig.asr.endpoint = asr.endpoint || null;
+      currentConfig.asr.api_key = asr.api_key || null;
+      currentConfig.asr.model = asr.model || null;
+      currentConfig.asr.language = asr.language || null;
+
+      const llm = getActiveLlmConnection();
+      currentConfig.llm.provider = llm.provider;
+      currentConfig.llm.endpoint = llm.endpoint || null;
+      currentConfig.llm.api_key = llm.api_key || null;
+      currentConfig.llm.model = llm.model || null;
+    }
+
     function validateSettings() {
       const asrEndpointInvalid = !isValidEndpoint(document.getElementById('asr-endpoint').value);
       const llmEndpointInvalid = llmEnabledCheckbox.checked && !isValidEndpoint(document.getElementById('llm-endpoint').value);
@@ -1494,23 +1677,17 @@
 
     llmEnabledCheckbox.addEventListener('change', () => {
       updateLlmVisibility();
-      saveConfig();
     });
 
     async function loadConfig() {
       currentConfig = await invoke('get_config');
-
-      document.getElementById('asr-provider').value = currentConfig.asr.provider;
-      document.getElementById('asr-endpoint').value = currentConfig.asr.endpoint || '';
-      document.getElementById('asr-api-key').value = currentConfig.asr.api_key || '';
-      document.getElementById('asr-model').value = currentConfig.asr.model || '';
-      document.getElementById('asr-language').value = currentConfig.asr.language || '';
+      ensureConnectionShape();
+      renderAsrConnections();
+      loadAsrConnectionFields(getActiveAsrConnection());
+      renderLlmConnections();
+      loadLlmConnectionFields(getActiveLlmConnection());
 
       llmEnabledCheckbox.checked = currentConfig.llm.enabled;
-      document.getElementById('llm-provider').value = currentConfig.llm.provider || 'mock';
-      document.getElementById('llm-endpoint').value = currentConfig.llm.endpoint || '';
-      document.getElementById('llm-api-key').value = currentConfig.llm.api_key || '';
-      document.getElementById('llm-model').value = currentConfig.llm.model || '';
       document.getElementById('llm-prompt').value = currentConfig.llm.prompt || '';
       updateLlmVisibility();
 
@@ -1564,17 +1741,12 @@
       }
       const seq = ++saveSeq;
       setSaveStatus('saving', 'settings.save_saving');
-      currentConfig.asr.provider = document.getElementById('asr-provider').value;
-      currentConfig.asr.endpoint = document.getElementById('asr-endpoint').value || null;
-      currentConfig.asr.api_key = document.getElementById('asr-api-key').value || null;
-      currentConfig.asr.model = document.getElementById('asr-model').value || null;
-      currentConfig.asr.language = document.getElementById('asr-language').value || null;
+      ensureConnectionShape();
+      saveAsrConnectionFields();
+      saveLlmConnectionFields();
+      syncLegacyProviderFields();
 
       currentConfig.llm.enabled = llmEnabledCheckbox.checked;
-      currentConfig.llm.provider = document.getElementById('llm-provider').value || 'mock';
-      currentConfig.llm.endpoint = document.getElementById('llm-endpoint').value || null;
-      currentConfig.llm.api_key = document.getElementById('llm-api-key').value || null;
-      currentConfig.llm.model = document.getElementById('llm-model').value || null;
       currentConfig.llm.prompt = document.getElementById('llm-prompt').value || '';
 
       const plugins = [];
@@ -1625,6 +1797,22 @@
     document.querySelectorAll('#view-settings select, #view-settings input[type="checkbox"]').forEach(el => {
       if (el.id === 'ui-language') return;
       el.addEventListener('change', () => {
+        if (el.id === 'asr-connection-select') {
+          const previous = el.dataset.previous;
+          if (previous) saveAsrConnectionFields(previous);
+          currentConfig.asr.active_connection = el.value;
+          renderAsrConnections();
+          loadAsrConnectionFields(getActiveAsrConnection());
+          validateSettings();
+        }
+        if (el.id === 'llm-connection-select') {
+          const previous = el.dataset.previous;
+          if (previous) saveLlmConnectionFields(previous);
+          currentConfig.llm.active_connection = el.value;
+          renderLlmConnections();
+          loadLlmConnectionFields(getActiveLlmConnection());
+          validateSettings();
+        }
         if (el.id === 'audio-device') {
           document.getElementById('record-audio-device').value = el.value;
         }
@@ -1634,11 +1822,74 @@
         saveConfig();
       });
     });
+    document.getElementById('asr-connection-add').addEventListener('click', () => {
+      saveAsrConnectionFields();
+      const id = createConnectionId('asr');
+      currentConfig.asr.connections.push({
+        id,
+        name: typexI18n.t('settings.new_asr_connection'),
+        provider: 'openai-compatible',
+        endpoint: null,
+        api_key: null,
+        model: 'whisper-1',
+        language: null,
+      });
+      currentConfig.asr.active_connection = id;
+      renderAsrConnections();
+      loadAsrConnectionFields(getActiveAsrConnection());
+      saveConfig();
+    });
+
+    document.getElementById('asr-connection-delete').addEventListener('click', () => {
+      ensureConnectionShape();
+      if (currentConfig.asr.connections.length <= 1) return;
+      currentConfig.asr.connections = currentConfig.asr.connections.filter(c => c.id !== currentConfig.asr.active_connection);
+      currentConfig.asr.active_connection = currentConfig.asr.connections[0].id;
+      renderAsrConnections();
+      loadAsrConnectionFields(getActiveAsrConnection());
+      saveConfig();
+    });
+
+    document.getElementById('llm-connection-add').addEventListener('click', () => {
+      saveLlmConnectionFields();
+      const id = createConnectionId('llm');
+      currentConfig.llm.connections.push({
+        id,
+        name: typexI18n.t('settings.new_llm_connection'),
+        provider: 'openai-compatible',
+        endpoint: null,
+        api_key: null,
+        model: 'gpt-4o-mini',
+      });
+      currentConfig.llm.active_connection = id;
+      renderLlmConnections();
+      loadLlmConnectionFields(getActiveLlmConnection());
+      saveConfig();
+    });
+
+    document.getElementById('llm-connection-delete').addEventListener('click', () => {
+      ensureConnectionShape();
+      if (currentConfig.llm.connections.length <= 1) return;
+      currentConfig.llm.connections = currentConfig.llm.connections.filter(c => c.id !== currentConfig.llm.active_connection);
+      currentConfig.llm.active_connection = currentConfig.llm.connections[0].id;
+      renderLlmConnections();
+      loadLlmConnectionFields(getActiveLlmConnection());
+      saveConfig();
+    });
+
     // Auto-save on input for text/password/number/textarea fields
     document.querySelectorAll('#view-settings input[type="text"], #view-settings input[type="password"], #view-settings input[type="number"], #view-settings textarea').forEach(el => {
       el.addEventListener('input', () => {
         if (el.id === 'audio-device') {
           document.getElementById('record-audio-device').value = el.value;
+        }
+        if (el.id === 'asr-connection-name') {
+          saveAsrConnectionFields();
+          renderAsrConnections();
+        }
+        if (el.id === 'llm-connection-name') {
+          saveLlmConnectionFields();
+          renderLlmConnections();
         }
         validateSettings();
         scheduleSaveConfig();

@@ -1,6 +1,13 @@
 # TypeX Configuration
 
+# Existing single-value [asr] / [llm] configs are migrated automatically.
+
 [asr]
+active_connection = "default"
+
+[[asr.connections]]
+id = "default"
+name = "Default ASR"
 provider = "mock"         # mock | openai-compatible
 # provider = "openai-compatible"
 # endpoint = "https://api.openai.com/v1"
@@ -10,11 +17,17 @@ provider = "mock"         # mock | openai-compatible
 
 [llm]
 enabled = false            # set true to enable text optimization
+active_connection = "default"
+# prompt = """You are a text optimization assistant..."""  # custom system prompt, optional
+
+[[llm.connections]]
+id = "default"
+name = "Default LLM"
 provider = "mock"          # mock | openai-compatible
+# provider = "openai-compatible"
 # endpoint = "https://api.openai.com/v1"
 # model = "gpt-4o-mini"
 # api_key = "sk-..."
-# prompt = """You are a text optimization assistant..."""  # custom system prompt, optional
 
 [pipeline]
 performance = "balanced"   # low | balanced | high

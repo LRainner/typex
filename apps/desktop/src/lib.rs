@@ -177,10 +177,15 @@ struct SystemInfo {
 #[tauri::command]
 fn get_system_info(state: tauri::State<AppState>) -> SystemInfo {
     let config = state.config.lock().unwrap().clone();
+    let active_asr = config.asr.active_connection_config();
     SystemInfo {
         version: env!("CARGO_PKG_VERSION").to_string(),
-        asr_provider: config.asr.provider.clone(),
-        asr_model: config.asr.model.clone().unwrap_or_default(),
+        asr_provider: active_asr
+            .map(|connection| connection.provider.clone())
+            .unwrap_or_else(|| config.asr.provider.clone()),
+        asr_model: active_asr
+            .and_then(|connection| connection.model.clone())
+            .unwrap_or_default(),
         audio_device: config
             .audio
             .device
@@ -207,7 +212,9 @@ fn get_config(state: tauri::State<AppState>) -> AppConfig {
 }
 
 #[tauri::command]
-fn save_config(state: tauri::State<AppState>, config: AppConfig) -> Result<(), String> {
+fn save_config(state: tauri::State<AppState>, mut config: AppConfig) -> Result<(), String> {
+    config.normalize_connections_mut();
+
     // 1. Persist config to disk FIRST — always save user settings
     config.save(&state.config_path).map_err(|e| e.to_string())?;
 

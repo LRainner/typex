@@ -33,6 +33,27 @@ pub struct AppConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AsrConfig {
+    #[serde(default = "default_asr_provider")]
+    pub provider: String,
+    #[serde(default)]
+    pub endpoint: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub language: Option<String>,
+    #[serde(default = "default_connection_id")]
+    pub active_connection: String,
+    #[serde(default)]
+    pub connections: Vec<AsrConnection>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AsrConnection {
+    pub id: String,
+    pub name: String,
+    #[serde(default = "default_asr_provider")]
     pub provider: String,
     #[serde(default)]
     pub endpoint: Option<String>,
@@ -44,7 +65,7 @@ pub struct AsrConfig {
     pub language: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -56,10 +77,28 @@ pub struct LlmConfig {
     pub model: Option<String>,
     #[serde(default)]
     pub api_key: Option<String>,
+    #[serde(default = "default_connection_id")]
+    pub active_connection: String,
+    #[serde(default)]
+    pub connections: Vec<LlmConnection>,
     /// Custom system prompt for text optimization.
     /// If None or empty, a sensible default is used.
     #[serde(default)]
     pub prompt: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmConnection {
+    pub id: String,
+    pub name: String,
+    #[serde(default = "default_llm_provider")]
+    pub provider: String,
+    #[serde(default)]
+    pub endpoint: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub api_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -88,12 +127,15 @@ pub enum PerformanceMode {
 impl AppConfig {
     pub fn load(path: &std::path::Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)?;
-        let config: AppConfig = toml::from_str(&content)?;
+        let mut config: AppConfig = toml::from_str(&content)?;
+        config.normalize_connections_mut();
         Ok(config)
     }
 
     pub fn save(&self, path: &std::path::Path) -> Result<()> {
-        let content = toml::to_string_pretty(self)?;
+        let mut config = self.clone();
+        config.normalize_connections_mut();
+        let content = toml::to_string_pretty(&config)?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -105,20 +147,131 @@ impl AppConfig {
         let config = AppConfig::default();
         toml::to_string_pretty(&config).unwrap_or_default()
     }
+
+    pub fn normalize_connections_mut(&mut self) {
+        self.asr.normalize_connections_mut();
+        self.llm.normalize_connections_mut();
+    }
+}
+
+impl AsrConfig {
+    pub fn normalize_connections_mut(&mut self) {
+        if self.active_connection.trim().is_empty() {
+            self.active_connection = default_connection_id();
+        }
+
+        if self.connections.is_empty() {
+            self.connections.push(AsrConnection {
+                id: self.active_connection.clone(),
+                name: "Default ASR".into(),
+                provider: if self.provider.trim().is_empty() {
+                    default_asr_provider()
+                } else {
+                    self.provider.clone()
+                },
+                endpoint: self.endpoint.clone(),
+                model: self.model.clone(),
+                api_key: self.api_key.clone(),
+                language: self.language.clone(),
+            });
+        }
+
+        if !self
+            .connections
+            .iter()
+            .any(|connection| connection.id == self.active_connection)
+            && let Some(first) = self.connections.first()
+        {
+            self.active_connection = first.id.clone();
+        }
+
+        if let Some(active) = self.active_connection_config().cloned() {
+            self.provider = active.provider;
+            self.endpoint = active.endpoint;
+            self.model = active.model;
+            self.api_key = active.api_key;
+            self.language = active.language;
+        }
+    }
+
+    pub fn active_connection_config(&self) -> Option<&AsrConnection> {
+        self.connections
+            .iter()
+            .find(|connection| connection.id == self.active_connection)
+            .or_else(|| self.connections.first())
+    }
+}
+
+impl LlmConfig {
+    pub fn normalize_connections_mut(&mut self) {
+        if self.active_connection.trim().is_empty() {
+            self.active_connection = default_connection_id();
+        }
+
+        if self.connections.is_empty() {
+            self.connections.push(LlmConnection {
+                id: self.active_connection.clone(),
+                name: "Default LLM".into(),
+                provider: if self.provider.trim().is_empty() {
+                    default_llm_provider()
+                } else {
+                    self.provider.clone()
+                },
+                endpoint: self.endpoint.clone(),
+                model: self.model.clone(),
+                api_key: self.api_key.clone(),
+            });
+        }
+
+        if !self
+            .connections
+            .iter()
+            .any(|connection| connection.id == self.active_connection)
+            && let Some(first) = self.connections.first()
+        {
+            self.active_connection = first.id.clone();
+        }
+
+        if let Some(active) = self.active_connection_config().cloned() {
+            self.provider = active.provider;
+            self.endpoint = active.endpoint;
+            self.model = active.model;
+            self.api_key = active.api_key;
+        }
+    }
+
+    pub fn active_connection_config(&self) -> Option<&LlmConnection> {
+        self.connections
+            .iter()
+            .find(|connection| connection.id == self.active_connection)
+            .or_else(|| self.connections.first())
+    }
 }
 
 fn default_asr() -> AsrConfig {
-    AsrConfig {
-        provider: "mock".into(),
+    let mut config = AsrConfig {
+        provider: default_asr_provider(),
         endpoint: None,
         model: None,
         api_key: None,
         language: None,
-    }
+        active_connection: default_connection_id(),
+        connections: Vec::new(),
+    };
+    config.normalize_connections_mut();
+    config
+}
+
+fn default_asr_provider() -> String {
+    "mock".into()
 }
 
 fn default_llm_provider() -> String {
     "mock".into()
+}
+
+fn default_connection_id() -> String {
+    "default".into()
 }
 
 fn default_performance() -> PerformanceMode {
@@ -132,6 +285,23 @@ fn default_injector() -> String {
 impl Default for AsrConfig {
     fn default() -> Self {
         default_asr()
+    }
+}
+
+impl Default for LlmConfig {
+    fn default() -> Self {
+        let mut config = Self {
+            enabled: false,
+            provider: default_llm_provider(),
+            endpoint: None,
+            model: None,
+            api_key: None,
+            active_connection: default_connection_id(),
+            connections: Vec::new(),
+            prompt: None,
+        };
+        config.normalize_connections_mut();
+        config
     }
 }
 
