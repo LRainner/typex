@@ -1593,6 +1593,7 @@
     }
 
     function loadAsrConnectionFields(connection) {
+      if (!connection) return;
       document.getElementById('asr-connection-name').value = connection.name || '';
       document.getElementById('asr-provider').value = connection.provider || 'mock';
       document.getElementById('asr-endpoint').value = connection.endpoint || '';
@@ -1602,6 +1603,7 @@
     }
 
     function loadLlmConnectionFields(connection) {
+      if (!connection) return;
       document.getElementById('llm-connection-name').value = connection.name || '';
       document.getElementById('llm-provider').value = connection.provider || 'mock';
       document.getElementById('llm-endpoint').value = connection.endpoint || '';
@@ -1609,9 +1611,10 @@
       document.getElementById('llm-model').value = connection.model || '';
     }
 
-    function saveAsrConnectionFields(connectionId = currentConfig.asr.active_connection) {
+    function saveAsrConnectionFields(connectionId) {
       if (!ensureConnectionShape()) return;
-      const connection = currentConfig.asr.connections.find(c => c.id === connectionId);
+      const id = connectionId || currentConfig.asr.active_connection;
+      const connection = currentConfig.asr.connections.find(c => c.id === id);
       if (!connection) return;
       connection.name = document.getElementById('asr-connection-name').value.trim() || connection.id;
       connection.provider = document.getElementById('asr-provider').value || 'mock';
@@ -1621,9 +1624,10 @@
       connection.language = document.getElementById('asr-language').value.trim() || null;
     }
 
-    function saveLlmConnectionFields(connectionId = currentConfig.llm.active_connection) {
+    function saveLlmConnectionFields(connectionId) {
       if (!ensureConnectionShape()) return;
-      const connection = currentConfig.llm.connections.find(c => c.id === connectionId);
+      const id = connectionId || currentConfig.llm.active_connection;
+      const connection = currentConfig.llm.connections.find(c => c.id === id);
       if (!connection) return;
       connection.name = document.getElementById('llm-connection-name').value.trim() || connection.id;
       connection.provider = document.getElementById('llm-provider').value || 'mock';
