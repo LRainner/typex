@@ -1519,6 +1519,7 @@
     }
 
     function ensureConnectionShape() {
+      if (!currentConfig) return false;
       if (!currentConfig.asr) currentConfig.asr = {};
       if (!Array.isArray(currentConfig.asr.connections) || currentConfig.asr.connections.length === 0) {
         const id = currentConfig.asr.active_connection || 'default';
@@ -1553,15 +1554,16 @@
       if (!currentConfig.llm.active_connection || !currentConfig.llm.connections.some(c => c.id === currentConfig.llm.active_connection)) {
         currentConfig.llm.active_connection = currentConfig.llm.connections[0].id;
       }
+      return true;
     }
 
     function getActiveAsrConnection() {
-      ensureConnectionShape();
+      if (!ensureConnectionShape()) return null;
       return currentConfig.asr.connections.find(c => c.id === currentConfig.asr.active_connection) || currentConfig.asr.connections[0];
     }
 
     function getActiveLlmConnection() {
-      ensureConnectionShape();
+      if (!ensureConnectionShape()) return null;
       return currentConfig.llm.connections.find(c => c.id === currentConfig.llm.active_connection) || currentConfig.llm.connections[0];
     }
 
@@ -1579,13 +1581,13 @@
     }
 
     function renderAsrConnections() {
-      ensureConnectionShape();
+      if (!ensureConnectionShape()) return;
       renderConnectionOptions('asr-connection-select', currentConfig.asr.connections, currentConfig.asr.active_connection);
       document.getElementById('asr-connection-delete').disabled = currentConfig.asr.connections.length <= 1;
     }
 
     function renderLlmConnections() {
-      ensureConnectionShape();
+      if (!ensureConnectionShape()) return;
       renderConnectionOptions('llm-connection-select', currentConfig.llm.connections, currentConfig.llm.active_connection);
       document.getElementById('llm-connection-delete').disabled = currentConfig.llm.connections.length <= 1;
     }
@@ -1608,26 +1610,26 @@
     }
 
     function saveAsrConnectionFields(connectionId = currentConfig.asr.active_connection) {
-      ensureConnectionShape();
+      if (!ensureConnectionShape()) return;
       const connection = currentConfig.asr.connections.find(c => c.id === connectionId);
       if (!connection) return;
-      connection.name = document.getElementById('asr-connection-name').value || connection.id;
+      connection.name = document.getElementById('asr-connection-name').value.trim() || connection.id;
       connection.provider = document.getElementById('asr-provider').value || 'mock';
-      connection.endpoint = document.getElementById('asr-endpoint').value || null;
-      connection.api_key = document.getElementById('asr-api-key').value || null;
-      connection.model = document.getElementById('asr-model').value || null;
-      connection.language = document.getElementById('asr-language').value || null;
+      connection.endpoint = document.getElementById('asr-endpoint').value.trim() || null;
+      connection.api_key = document.getElementById('asr-api-key').value.trim() || null;
+      connection.model = document.getElementById('asr-model').value.trim() || null;
+      connection.language = document.getElementById('asr-language').value.trim() || null;
     }
 
     function saveLlmConnectionFields(connectionId = currentConfig.llm.active_connection) {
-      ensureConnectionShape();
+      if (!ensureConnectionShape()) return;
       const connection = currentConfig.llm.connections.find(c => c.id === connectionId);
       if (!connection) return;
-      connection.name = document.getElementById('llm-connection-name').value || connection.id;
+      connection.name = document.getElementById('llm-connection-name').value.trim() || connection.id;
       connection.provider = document.getElementById('llm-provider').value || 'mock';
-      connection.endpoint = document.getElementById('llm-endpoint').value || null;
-      connection.api_key = document.getElementById('llm-api-key').value || null;
-      connection.model = document.getElementById('llm-model').value || null;
+      connection.endpoint = document.getElementById('llm-endpoint').value.trim() || null;
+      connection.api_key = document.getElementById('llm-api-key').value.trim() || null;
+      connection.model = document.getElementById('llm-model').value.trim() || null;
     }
 
     function syncLegacyProviderFields() {
@@ -1681,7 +1683,7 @@
 
     async function loadConfig() {
       currentConfig = await invoke('get_config');
-      ensureConnectionShape();
+      if (!ensureConnectionShape()) return;
       renderAsrConnections();
       loadAsrConnectionFields(getActiveAsrConnection());
       renderLlmConnections();
@@ -1741,7 +1743,7 @@
       }
       const seq = ++saveSeq;
       setSaveStatus('saving', 'settings.save_saving');
-      ensureConnectionShape();
+      if (!ensureConnectionShape()) return;
       saveAsrConnectionFields();
       saveLlmConnectionFields();
       syncLegacyProviderFields();
@@ -1841,7 +1843,7 @@
     });
 
     document.getElementById('asr-connection-delete').addEventListener('click', () => {
-      ensureConnectionShape();
+      if (!ensureConnectionShape()) return;
       if (currentConfig.asr.connections.length <= 1) return;
       currentConfig.asr.connections = currentConfig.asr.connections.filter(c => c.id !== currentConfig.asr.active_connection);
       currentConfig.asr.active_connection = currentConfig.asr.connections[0].id;
@@ -1868,7 +1870,7 @@
     });
 
     document.getElementById('llm-connection-delete').addEventListener('click', () => {
-      ensureConnectionShape();
+      if (!ensureConnectionShape()) return;
       if (currentConfig.llm.connections.length <= 1) return;
       currentConfig.llm.connections = currentConfig.llm.connections.filter(c => c.id !== currentConfig.llm.active_connection);
       currentConfig.llm.active_connection = currentConfig.llm.connections[0].id;

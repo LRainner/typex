@@ -71,6 +71,8 @@ fn create_asr_provider(config: &AppConfig) -> anyhow::Result<Arc<dyn AsrProvider
             let endpoint = connection
                 .endpoint
                 .as_deref()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
                 .unwrap_or("https://api.openai.com/v1");
             let api_key = connection
                 .api_key
@@ -83,7 +85,12 @@ fn create_asr_provider(config: &AppConfig) -> anyhow::Result<Arc<dyn AsrProvider
                         .map(|s| s.trim().to_string())
                         .filter(|s| !s.is_empty())
                 });
-            let model = connection.model.as_deref().unwrap_or("whisper-1");
+            let model = connection
+                .model
+                .as_deref()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .unwrap_or("whisper-1");
 
             let mut provider = typex_asr::openai_compat::OpenAiCompatibleAsrProvider::new(
                 endpoint.to_string(),
@@ -117,6 +124,8 @@ fn create_llm_provider(config: &AppConfig) -> anyhow::Result<Option<Arc<dyn LlmP
             let endpoint = connection
                 .endpoint
                 .as_deref()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
                 .unwrap_or("https://api.openai.com/v1");
             let api_key = connection
                 .api_key
@@ -130,7 +139,12 @@ fn create_llm_provider(config: &AppConfig) -> anyhow::Result<Option<Arc<dyn LlmP
                         .filter(|s| !s.is_empty())
                 });
 
-            let model = connection.model.as_deref().unwrap_or("gpt-4o-mini");
+            let model = connection
+                .model
+                .as_deref()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .unwrap_or("gpt-4o-mini");
 
             let has_key = api_key.is_some();
             tracing::info!(
