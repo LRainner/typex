@@ -1,9 +1,9 @@
 use super::*;
 
-/// Simulate the exact data flow: frontend JSON → Rust AppConfig → TOML → verify
+/// Simulate the exact data flow: frontend JSON → Rust AppConfig → TOML → verify.
 #[test]
-fn test_llm_config_roundtrip_from_json() {
-    // This is what the frontend sends via invoke('save_config', { config: ... })
+fn test_llm_config_roundtrip_from_legacy_json() {
+    // This is what the previous frontend shape sent via invoke('save_config', { config: ... }).
     let json = serde_json::json!({
         "asr": {
             "provider": "openai-compatible",
@@ -46,46 +46,176 @@ fn test_llm_config_roundtrip_from_json() {
         }
     });
 
-    // Step 1: Deserialize from JSON (mimics Tauri IPC)
-    let config: AppConfig = serde_json::from_value(json).expect("JSON → AppConfig should work");
+    let mut config: AppConfig = serde_json::from_value(json).expect("JSON → AppConfig should work");
+    config.normalize_connections_mut();
 
-    // Step 2: Verify fields
+    let asr = config.asr.active_connection_config().unwrap();
+    assert_eq!(asr.provider, "openai-compatible");
+    assert_eq!(asr.endpoint.as_deref(), Some("http://127.0.0.1:8080"));
+    assert_eq!(asr.model.as_deref(), Some("qwen3-asr-0.6b"));
+
+    let llm = config.llm.active_connection_config().unwrap();
     assert_eq!(config.llm.enabled, true);
-    assert_eq!(config.llm.provider, "openai-compatible");
-    assert_eq!(
-        config.llm.endpoint.as_deref(),
-        Some("https://api.openai.com/v1")
-    );
-    assert_eq!(config.llm.model.as_deref(), Some("gpt-4o-mini"));
-    assert_eq!(config.llm.api_key.as_deref(), Some("sk-test-key-12345"));
+    assert_eq!(llm.provider, "openai-compatible");
+    assert_eq!(llm.endpoint.as_deref(), Some("https://api.openai.com/v1"));
+    assert_eq!(llm.model.as_deref(), Some("gpt-4o-mini"));
+    assert_eq!(llm.api_key.as_deref(), Some("sk-test-key-12345"));
     assert_eq!(
         config.llm.prompt.as_deref(),
         Some("You are a helpful assistant.")
     );
 
-    // Step 3: Serialize to TOML (mimics config.save())
     let toml_str = toml::to_string_pretty(&config).expect("AppConfig → TOML should work");
-    println!("=== TOML OUTPUT ===\n{}", toml_str);
+    assert!(toml_str.contains("connections"));
+    assert!(toml_str.contains("active_connection"));
+    assert!(toml_str.contains("sk-test-key-12345"));
 
-    // Step 4: Verify TOML contains the LLM fields
-    assert!(
-        toml_str.contains("endpoint"),
-        "TOML should contain endpoint"
-    );
-    assert!(toml_str.contains("api_key"), "TOML should contain api_key");
-    assert!(toml_str.contains("model"), "TOML should contain model");
-
-    // Step 5: Round-trip: TOML → AppConfig → verify same values
-    let config2: AppConfig = toml::from_str(&toml_str).expect("TOML → AppConfig should work");
+    let mut config2: AppConfig = toml::from_str(&toml_str).expect("TOML → AppConfig should work");
+    config2.normalize_connections_mut();
     assert_eq!(
-        config2.llm.endpoint.as_deref(),
+        config2
+            .llm
+            .active_connection_config()
+            .unwrap()
+            .endpoint
+            .as_deref(),
         Some("https://api.openai.com/v1")
     );
-    assert_eq!(config2.llm.model.as_deref(), Some("gpt-4o-mini"));
-    assert_eq!(config2.llm.api_key.as_deref(), Some("sk-test-key-12345"));
 }
 
-/// Verify that Option::None fields are omitted from TOML (expected TOML behavior)
+#[test]
+fn test_legacy_toml_normalizes_to_connections() {
+    let toml_str = r#"
+[asr]
+provider = "openai-compatible"
+endpoint = "http://127.0.0.1:8080/v1"
+model = "whisper-local"
+language = "zh"
+
+[llm]
+enabled = true
+provider = "openai-compatible"
+endpoint = "https://openrouter.ai/api/v1"
+model = "anthropic/claude-sonnet"
+api_key = "sk-test"
+prompt = "Polish this text."
+"#;
+
+    let mut config: AppConfig = toml::from_str(toml_str).unwrap();
+    config.normalize_connections_mut();
+
+    assert_eq!(config.asr.active_connection, "default");
+    assert_eq!(config.asr.connections.len(), 1);
+    let asr = config.asr.active_connection_config().unwrap();
+    assert_eq!(asr.provider, "openai-compatible");
+    assert_eq!(asr.endpoint.as_deref(), Some("http://127.0.0.1:8080/v1"));
+    assert_eq!(asr.model.as_deref(), Some("whisper-local"));
+    assert_eq!(asr.language.as_deref(), Some("zh"));
+
+    assert_eq!(config.llm.active_connection, "default");
+    assert_eq!(config.llm.connections.len(), 1);
+    let llm = config.llm.active_connection_config().unwrap();
+    assert_eq!(llm.provider, "openai-compatible");
+    assert_eq!(
+        llm.endpoint.as_deref(),
+        Some("https://openrouter.ai/api/v1")
+    );
+    assert_eq!(llm.model.as_deref(), Some("anthropic/claude-sonnet"));
+    assert_eq!(llm.api_key.as_deref(), Some("sk-test"));
+    assert_eq!(config.llm.prompt.as_deref(), Some("Polish this text."));
+}
+
+#[test]
+fn test_new_connection_toml_uses_active_connection() {
+    let toml_str = r#"
+[asr]
+provider = "mock"
+active_connection = "local-asr"
+
+[[asr.connections]]
+id = "openai-asr"
+name = "OpenAI ASR"
+provider = "openai-compatible"
+endpoint = "https://api.openai.com/v1"
+model = "whisper-1"
+
+[[asr.connections]]
+id = "local-asr"
+name = "Local ASR"
+provider = "openai-compatible"
+endpoint = "http://127.0.0.1:8080/v1"
+model = "local-whisper"
+language = "en"
+
+[llm]
+enabled = true
+provider = "mock"
+active_connection = "openrouter"
+prompt = "Polish this text."
+
+[[llm.connections]]
+id = "local-llm"
+name = "Local LLM"
+provider = "openai-compatible"
+endpoint = "http://127.0.0.1:11434/v1"
+model = "qwen"
+
+[[llm.connections]]
+id = "openrouter"
+name = "OpenRouter"
+provider = "openai-compatible"
+endpoint = "https://openrouter.ai/api/v1"
+model = "anthropic/claude-sonnet"
+"#;
+
+    let mut config: AppConfig = toml::from_str(toml_str).unwrap();
+    config.normalize_connections_mut();
+
+    let asr = config.asr.active_connection_config().unwrap();
+    assert_eq!(asr.id, "local-asr");
+    assert_eq!(asr.endpoint.as_deref(), Some("http://127.0.0.1:8080/v1"));
+    assert_eq!(config.asr.provider, "openai-compatible");
+    assert_eq!(config.asr.model.as_deref(), Some("local-whisper"));
+
+    let llm = config.llm.active_connection_config().unwrap();
+    assert_eq!(llm.id, "openrouter");
+    assert_eq!(
+        llm.endpoint.as_deref(),
+        Some("https://openrouter.ai/api/v1")
+    );
+    assert_eq!(config.llm.provider, "openai-compatible");
+    assert_eq!(config.llm.model.as_deref(), Some("anthropic/claude-sonnet"));
+    assert_eq!(config.llm.prompt.as_deref(), Some("Polish this text."));
+}
+
+#[test]
+fn test_missing_active_connection_falls_back_to_first() {
+    let toml_str = r#"
+[asr]
+active_connection = "missing"
+
+[[asr.connections]]
+id = "first-asr"
+name = "First ASR"
+provider = "mock"
+
+[llm]
+active_connection = "missing"
+
+[[llm.connections]]
+id = "first-llm"
+name = "First LLM"
+provider = "mock"
+"#;
+
+    let mut config: AppConfig = toml::from_str(toml_str).unwrap();
+    config.normalize_connections_mut();
+
+    assert_eq!(config.asr.active_connection, "first-asr");
+    assert_eq!(config.llm.active_connection, "first-llm");
+}
+
+/// Verify that Option::None fields are omitted from TOML (expected TOML behavior).
 #[test]
 fn test_option_none_omitted_from_toml() {
     let json = serde_json::json!({
@@ -113,11 +243,10 @@ fn test_option_none_omitted_from_toml() {
         "ui": { "language": "auto" }
     });
 
-    let config: AppConfig = serde_json::from_value(json).unwrap();
+    let mut config: AppConfig = serde_json::from_value(json).unwrap();
+    config.normalize_connections_mut();
     let toml_str = toml::to_string_pretty(&config).unwrap();
-    println!("=== TOML WITH NULLS ===\n{}", toml_str);
 
-    // Option::None fields should NOT appear in TOML
     assert!(
         !toml_str.contains("endpoint"),
         "None endpoint should be omitted from TOML"
@@ -130,8 +259,6 @@ fn test_option_none_omitted_from_toml() {
         !toml_str.contains("model = "),
         "None model should be omitted from TOML"
     );
-
-    // But empty Some("") prompt SHOULD appear in TOML (it's Some, not None)
     assert!(
         toml_str.contains("prompt"),
         "Empty prompt string should appear in TOML"
@@ -143,15 +270,9 @@ fn test_option_none_omitted_from_toml() {
 }
 
 /// Verify that when the frontend sends `null` for an Option<String> field,
-/// it correctly deserializes to None (rather than failing).
-/// This was the root cause of config save failures before `prompt` was
-/// changed from String to Option<String>.
+/// it correctly deserializes to None.
 #[test]
 fn test_null_deserializes_to_none() {
-    // Simulate what happens when prompt textarea is empty:
-    // currentConfig.llm.prompt = document.getElementById('llm-prompt').value || '';
-    // Now sends "prompt": "" (since JS fix changed || null to || '')
-    // But even if old buggy code sends null, it should still work now.
     let json = serde_json::json!({
         "asr": { "provider": "mock" },
         "llm": {
@@ -169,13 +290,8 @@ fn test_null_deserializes_to_none() {
     });
 
     let config: AppConfig = serde_json::from_value(json).expect("null→Option<String> should work");
-    assert_eq!(
-        config.llm.prompt, None,
-        "null should become None for Option<String>"
-    );
-    println!("✅ null→Option<String> correctly deserialized to None");
+    assert_eq!(config.llm.prompt, None);
 
-    // Also test: empty string → Some("")
     let json2 = serde_json::json!({
         "asr": { "provider": "mock" },
         "llm": {
@@ -193,5 +309,4 @@ fn test_null_deserializes_to_none() {
     });
     let config2: AppConfig = serde_json::from_value(json2).unwrap();
     assert_eq!(config2.llm.prompt.as_deref(), Some(""));
-    println!("✅ empty string→Option<String> correctly deserialized to Some(\"\")");
 }
