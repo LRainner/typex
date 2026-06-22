@@ -158,7 +158,11 @@ fn api_key_or_env(value: Option<String>) -> Option<String> {
 fn sanitize_connection_error(error: impl std::fmt::Display) -> String {
     let mut message = error.to_string();
     if message.len() > 500 {
-        message.truncate(500);
+        let mut limit = 500;
+        while !message.is_char_boundary(limit) {
+            limit -= 1;
+        }
+        message.truncate(limit);
         message.push('…');
     }
     format!("Connection failed: {}", message)
