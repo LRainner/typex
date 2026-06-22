@@ -403,6 +403,36 @@
     }
     .field-error { color: var(--danger); }
     .field-warning { color: var(--warning); }
+    .connection-test-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      margin-top: 2px;
+    }
+    .connection-test-copy {
+      min-width: 0;
+      flex: 1;
+    }
+    .connection-test-status {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
+    .connection-test-status.success { color: var(--success); }
+    .connection-test-status.error { color: var(--danger); }
+    .connection-test-status.testing { color: var(--warning); }
+    .connection-test-time {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      line-height: 1.45;
+    }
     input[aria-invalid="true"],
     textarea[aria-invalid="true"],
     select[aria-invalid="true"] {
@@ -1197,6 +1227,13 @@
                 <input id="asr-language" type="text" placeholder="en, zh, ja..." aria-describedby="asr-language-help" />
                 <div class="field-help" id="asr-language-help" data-i18n="settings.asr_language_help"></div>
               </div>
+              <div class="connection-test-row">
+                <div class="connection-test-copy">
+                  <div class="connection-test-status" id="asr-test-status" role="status" aria-live="polite"></div>
+                  <div class="connection-test-time" id="asr-test-time"></div>
+                </div>
+                <button class="btn-action" type="button" id="asr-test-connection" data-i18n="settings.test_connection"></button>
+              </div>
             </div>
 
             <div class="settings-subsection">
@@ -1249,6 +1286,13 @@
                   <label class="field-label" for="llm-model" data-i18n="settings.llm_model"></label>
                   <input id="llm-model" type="text" placeholder="gpt-4o-mini" aria-describedby="llm-model-help" />
                   <div class="field-help" id="llm-model-help" data-i18n="settings.llm_model_help"></div>
+                </div>
+                <div class="connection-test-row">
+                  <div class="connection-test-copy">
+                    <div class="connection-test-status" id="llm-test-status" role="status" aria-live="polite"></div>
+                    <div class="connection-test-time" id="llm-test-time"></div>
+                  </div>
+                  <button class="btn-action" type="button" id="llm-test-connection" data-i18n="settings.test_connection"></button>
                 </div>
               </div>
               <div class="field-help" id="llm-disabled-help" data-i18n="settings.llm_disabled_advanced"></div>
@@ -1440,6 +1484,7 @@
       });
       // Refresh data when switching to these views
       if (view === 'history') loadHistory();
+      if (view === 'settings') refreshConnectionTestTimes();
       if (view === 'about') loadSystemInfo();
     }
 
@@ -1600,6 +1645,7 @@
       document.getElementById('asr-api-key').value = connection.api_key || '';
       document.getElementById('asr-model').value = connection.model || '';
       document.getElementById('asr-language').value = connection.language || '';
+      loadConnectionTestStatus('asr');
     }
 
     function loadLlmConnectionFields(connection) {
@@ -1609,6 +1655,7 @@
       document.getElementById('llm-endpoint').value = connection.endpoint || '';
       document.getElementById('llm-api-key').value = connection.api_key || '';
       document.getElementById('llm-model').value = connection.model || '';
+      loadConnectionTestStatus('llm');
     }
 
     function saveAsrConnectionFields(connectionId) {
@@ -1657,6 +1704,178 @@
       setFieldError('asr-endpoint', 'asr-endpoint-error', asrEndpointInvalid);
       setFieldError('llm-endpoint', 'llm-endpoint-error', llmEndpointInvalid);
       return !asrEndpointInvalid && !llmEndpointInvalid;
+    }
+
+    function getConnectionTestConnection(kind) {
+      return kind === 'asr' ? getActiveAsrConnection() : getActiveLlmConnection();
+    }
+
+    function getConnectionTestId(kind) {
+      const connection = getConnectionTestConnection(kind);
+      return connection?.id || 'default';
+    }
+
+    function getAsrConnectionDraft() {
+      return {
+        connection_id: getConnectionTestId('asr'),
+        provider: document.getElementById('asr-provider').value || 'mock',
+        endpoint: document.getElementById('asr-endpoint').value.trim() || null,
+        api_key: document.getElementById('asr-api-key').value.trim() || null,
+        model: document.getElementById('asr-model').value.trim() || null,
+        language: document.getElementById('asr-language').value.trim() || null,
+      };
+    }
+
+    function getLlmConnectionDraft() {
+      return {
+        connection_id: getConnectionTestId('llm'),
+        provider: document.getElementById('llm-provider').value || 'mock',
+        endpoint: document.getElementById('llm-endpoint').value.trim() || null,
+        api_key: document.getElementById('llm-api-key').value.trim() || null,
+        model: document.getElementById('llm-model').value.trim() || null,
+        language: null,
+      };
+    }
+
+    function formatRelativeTestTime(timestamp) {
+      if (!timestamp) return typexI18n.t('settings.connection_not_tested');
+      const time = typeof timestamp === 'number' ? timestamp : Date.parse(timestamp);
+      if (Number.isNaN(time)) return typexI18n.t('settings.connection_not_tested');
+      const elapsedMs = Date.now() - time;
+      if (!Number.isFinite(elapsedMs) || elapsedMs < 60_000) {
+        return typexI18n.t('settings.connection_last_tested_just_now');
+      }
+      const minutes = Math.floor(elapsedMs / 60_000);
+      if (minutes < 60) {
+        const key = minutes === 1
+          ? 'settings.connection_last_tested_minute_ago'
+          : 'settings.connection_last_tested_minutes_ago';
+        return typexI18n.t(key).replace('{0}', minutes);
+      }
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) {
+        const key = hours === 1
+          ? 'settings.connection_last_tested_hour_ago'
+          : 'settings.connection_last_tested_hours_ago';
+        return typexI18n.t(key).replace('{0}', hours);
+      }
+      const date = new Date(time);
+      return typexI18n.t('settings.connection_last_tested_at').replace('{0}', date.toLocaleString());
+    }
+
+    function setConnectionTestStatus(kind, state, message, timestamp, messageKey = '') {
+      const statusEl = document.getElementById(`${kind}-test-status`);
+      const timeEl = document.getElementById(`${kind}-test-time`);
+      const button = document.getElementById(`${kind}-test-connection`);
+      if (!statusEl || !timeEl || !button) return;
+
+      statusEl.classList.remove('success', 'error', 'testing');
+      if (state) statusEl.classList.add(state);
+      statusEl.dataset.messageKey = messageKey || '';
+      statusEl.dataset.fallbackMessage = message || '';
+      statusEl.textContent = messageKey
+        ? typexI18n.t(messageKey)
+        : (message || typexI18n.t('settings.connection_not_tested'));
+      timeEl.dataset.timestamp = timestamp || '';
+      timeEl.textContent = formatRelativeTestTime(timestamp);
+      button.disabled = state === 'testing';
+      button.textContent = state === 'testing'
+        ? typexI18n.t('settings.connection_testing_short')
+        : typexI18n.t('settings.test_connection');
+    }
+
+    async function loadConnectionTestStatus(kind) {
+      try {
+        const status = await invoke('get_provider_connection_status', {
+          kind,
+          connectionId: getConnectionTestId(kind),
+        });
+        renderConnectionTestStatus(kind, status);
+      } catch (e) {
+        console.warn('Failed to load connection test status:', e);
+        setConnectionTestStatus(kind, null, typexI18n.t('settings.connection_not_tested'), null);
+      }
+    }
+
+    function connectionTestMessage(result) {
+      if (result?.message_key) return typexI18n.t(result.message_key);
+      if (result?.ok) return typexI18n.t('settings.connection_success');
+      return result?.message || typexI18n.t('settings.connection_failed');
+    }
+
+    function renderConnectionTestStatus(kind, status) {
+      if (!status) {
+        setConnectionTestStatus(kind, null, typexI18n.t('settings.connection_not_tested'), null);
+        return;
+      }
+      setConnectionTestStatus(
+        kind,
+        status.ok ? 'success' : 'error',
+        connectionTestMessage(status),
+        status.tested_at,
+        status.message_key || ''
+      );
+    }
+
+    function refreshConnectionTestTimes() {
+      ['asr', 'llm'].forEach(kind => {
+        const statusEl = document.getElementById(`${kind}-test-status`);
+        const timeEl = document.getElementById(`${kind}-test-time`);
+        const button = document.getElementById(`${kind}-test-connection`);
+        if (!statusEl || !timeEl || !button) return;
+
+        const messageKey = statusEl.dataset.messageKey || '';
+        const fallbackMessage = statusEl.dataset.fallbackMessage || '';
+        statusEl.textContent = messageKey
+          ? typexI18n.t(messageKey)
+          : (fallbackMessage || typexI18n.t('settings.connection_not_tested'));
+        timeEl.textContent = formatRelativeTestTime(timeEl.dataset.timestamp || null);
+        if (!button.disabled) button.textContent = typexI18n.t('settings.test_connection');
+      });
+    }
+
+    async function testAsrConnection() {
+      if (!validateSettings()) return;
+      setConnectionTestStatus('asr', 'testing', typexI18n.t('settings.connection_testing'), new Date().toISOString());
+      const saved = await saveConfig({ reloadConnectionStatus: false });
+      if (!saved) {
+        await loadConnectionTestStatus('asr');
+        return;
+      }
+      setConnectionTestStatus('asr', 'testing', typexI18n.t('settings.connection_testing'), new Date().toISOString());
+      try {
+        const result = await invoke('test_asr_connection', { request: getAsrConnectionDraft() });
+        renderConnectionTestStatus('asr', result);
+      } catch (e) {
+        renderConnectionTestStatus('asr', {
+          ok: false,
+          provider: document.getElementById('asr-provider').value || 'mock',
+          message: String(e || typexI18n.t('settings.connection_failed')),
+          tested_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    async function testLlmConnection() {
+      if (!validateSettings()) return;
+      setConnectionTestStatus('llm', 'testing', typexI18n.t('settings.connection_testing'), new Date().toISOString());
+      const saved = await saveConfig({ reloadConnectionStatus: false });
+      if (!saved) {
+        await loadConnectionTestStatus('llm');
+        return;
+      }
+      setConnectionTestStatus('llm', 'testing', typexI18n.t('settings.connection_testing'), new Date().toISOString());
+      try {
+        const result = await invoke('test_llm_connection', { request: getLlmConnectionDraft() });
+        renderConnectionTestStatus('llm', result);
+      } catch (e) {
+        renderConnectionTestStatus('llm', {
+          ok: false,
+          provider: document.getElementById('llm-provider').value || 'mock',
+          message: String(e || typexI18n.t('settings.connection_failed')),
+          tested_at: new Date().toISOString(),
+        });
+      }
     }
 
     function applyTheme(theme) {
@@ -1737,9 +1956,11 @@
       applyDynamicLabels();
       setSaveStatus(null, 'settings.save_idle');
       validateSettings();
+      refreshConnectionTestTimes();
     }
 
-    async function saveConfig() {
+    async function saveConfig(options = {}) {
+      const reloadConnectionStatus = options.reloadConnectionStatus !== false;
       if (!currentConfig) return false;
       if (!validateSettings()) {
         setSaveStatus('error', 'settings.save_invalid');
@@ -1771,6 +1992,10 @@
 
       try {
         await invoke('save_config', { config: currentConfig });
+        if (reloadConnectionStatus) {
+          loadConnectionTestStatus('asr');
+          loadConnectionTestStatus('llm');
+        }
         if (seq === saveSeq) setSaveStatus('saved', 'settings.save_saved');
         return true;
       } catch (e) {
@@ -1792,6 +2017,7 @@
         // loadConfig will also call applyAll, but we want immediate UI refresh
         if (currentConfig) currentConfig.ui.language = newLang;
         applyDynamicLabels();
+        refreshConnectionTestTimes();
         if (seq === saveSeq) setSaveStatus('saved', 'settings.save_saved');
       } catch (e) {
         console.error('Failed to set language:', e);
@@ -1882,6 +2108,10 @@
       loadLlmConnectionFields(getActiveLlmConnection());
       saveConfig();
     });
+
+    document.getElementById('asr-test-connection').addEventListener('click', testAsrConnection);
+    document.getElementById('llm-test-connection').addEventListener('click', testLlmConnection);
+    setInterval(refreshConnectionTestTimes, 60_000);
 
     // Auto-save on input for text/password/number/textarea fields
     document.querySelectorAll('#view-settings input[type="text"], #view-settings input[type="password"], #view-settings input[type="number"], #view-settings textarea').forEach(el => {
