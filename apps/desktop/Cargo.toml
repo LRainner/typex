@@ -25,3 +25,4 @@ log = { workspace = true }
 rusqlite = { workspace = true }
 chrono = "0.4"
 tracing-subscriber = { workspace = true }
+futures = { workspace = true }

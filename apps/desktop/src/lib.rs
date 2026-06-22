@@ -1,8 +1,13 @@
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicBool, AtomicU64, Ordering},
+use std::{
+    collections::BTreeMap,
+    path::Path,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
 };
 
+use futures::{StreamExt, stream};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tauri::{
@@ -11,7 +16,9 @@ use tauri::{
     tray::TrayIconBuilder,
 };
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
-use typex_config::AppConfig;
+use typex_config::{AppConfig, AsrConnection, LlmConnection};
+use typex_core::typex_asr::AsrProvider;
+use typex_core::typex_llm::LlmProvider;
 use typex_core::{TypeX, TypeXBuildOptions, build_typex_from_config};
 
 /// The spawn_blocking task returns this handle once the recording stop signal is received.
@@ -22,6 +29,7 @@ type RecordingAccFuture =
 struct AppState {
     config: Mutex<AppConfig>,
     config_path: std::path::PathBuf,
+    provider_status_path: std::path::PathBuf,
     db: Mutex<Connection>,
     pipeline: Mutex<Arc<TypeX>>,
     capture: Mutex<Option<typex_audio::MicrophoneCapture>>,
@@ -44,6 +52,13 @@ fn config_path(app: &tauri::AppHandle) -> std::path::PathBuf {
         .app_config_dir()
         .expect("failed to resolve app config dir")
         .join("config.toml")
+}
+
+fn provider_status_path(app: &tauri::AppHandle) -> std::path::PathBuf {
+    app.path()
+        .app_config_dir()
+        .expect("failed to resolve app config dir")
+        .join("provider_status.json")
 }
 
 fn db_path(app: &tauri::AppHandle) -> std::path::PathBuf {
@@ -83,6 +98,237 @@ struct HistoryEntry {
     text: String,
     created_at: String,
     pinned: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct ProviderStatusStore {
+    #[serde(default)]
+    asr: BTreeMap<String, ProviderConnectionStatus>,
+    #[serde(default)]
+    llm: BTreeMap<String, ProviderConnectionStatus>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ProviderConnectionStatus {
+    tested_at: String,
+    ok: bool,
+    provider: String,
+    #[serde(default)]
+    message: Option<String>,
+    #[serde(default)]
+    message_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ConnectionTestRequest {
+    #[serde(default)]
+    connection_id: Option<String>,
+    provider: String,
+    endpoint: Option<String>,
+    api_key: Option<String>,
+    model: Option<String>,
+    language: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ConnectionTestResult {
+    ok: bool,
+    message: String,
+    provider: String,
+    tested_at: Option<String>,
+    message_key: Option<String>,
+}
+
+fn trimmed_option(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn api_key_or_env(value: Option<String>) -> Option<String> {
+    trimmed_option(value).or_else(|| {
+        std::env::var("OPENAI_API_KEY")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    })
+}
+
+fn sanitize_connection_error(error: impl std::fmt::Display) -> String {
+    let mut message = error.to_string();
+    if message.len() > 500 {
+        message.truncate(500);
+        message.push('…');
+    }
+    format!("Connection failed: {}", message)
+}
+
+fn connection_test_result(
+    provider: String,
+    result: anyhow::Result<String>,
+) -> ConnectionTestResult {
+    match result {
+        Ok(message) => ConnectionTestResult {
+            ok: true,
+            message,
+            provider,
+            tested_at: None,
+            message_key: Some("settings.connection_success".into()),
+        },
+        Err(error) => ConnectionTestResult {
+            ok: false,
+            message: sanitize_connection_error(error),
+            provider,
+            tested_at: None,
+            message_key: None,
+        },
+    }
+}
+
+fn load_provider_status(path: &Path) -> ProviderStatusStore {
+    match std::fs::read_to_string(path) {
+        Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
+            tracing::warn!(
+                "failed to parse provider status from {}: {}",
+                path.display(),
+                e
+            );
+            ProviderStatusStore::default()
+        }),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => ProviderStatusStore::default(),
+        Err(e) => {
+            tracing::warn!(
+                "failed to read provider status from {}: {}",
+                path.display(),
+                e
+            );
+            ProviderStatusStore::default()
+        }
+    }
+}
+
+fn save_provider_status(path: &Path, status: &ProviderStatusStore) -> anyhow::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let content = serde_json::to_string_pretty(status)?;
+    std::fs::write(path, content)?;
+    Ok(())
+}
+
+fn provider_status_for_kind_mut<'a>(
+    store: &'a mut ProviderStatusStore,
+    kind: &str,
+) -> Option<&'a mut BTreeMap<String, ProviderConnectionStatus>> {
+    match kind {
+        "asr" => Some(&mut store.asr),
+        "llm" => Some(&mut store.llm),
+        _ => None,
+    }
+}
+
+fn provider_status_for_kind<'a>(
+    store: &'a ProviderStatusStore,
+    kind: &str,
+) -> Option<&'a BTreeMap<String, ProviderConnectionStatus>> {
+    match kind {
+        "asr" => Some(&store.asr),
+        "llm" => Some(&store.llm),
+        _ => None,
+    }
+}
+
+fn test_result_to_status(result: &ConnectionTestResult) -> ProviderConnectionStatus {
+    ProviderConnectionStatus {
+        tested_at: result.tested_at.clone().unwrap_or_default(),
+        ok: result.ok,
+        provider: result.provider.clone(),
+        message: if result.ok {
+            None
+        } else {
+            Some(result.message.clone())
+        },
+        message_key: result.message_key.clone(),
+    }
+}
+
+fn asr_connection_test_fields_changed(old: &AsrConnection, new: &AsrConnection) -> bool {
+    old.provider != new.provider
+        || old.endpoint != new.endpoint
+        || old.api_key != new.api_key
+        || old.model != new.model
+        || old.language != new.language
+}
+
+fn llm_connection_test_fields_changed(old: &LlmConnection, new: &LlmConnection) -> bool {
+    old.provider != new.provider
+        || old.endpoint != new.endpoint
+        || old.api_key != new.api_key
+        || old.model != new.model
+}
+
+fn reset_changed_provider_status(
+    old_config: &AppConfig,
+    new_config: &AppConfig,
+    status: &mut ProviderStatusStore,
+) -> bool {
+    let mut changed = false;
+
+    for old in &old_config.asr.connections {
+        match new_config
+            .asr
+            .connections
+            .iter()
+            .find(|new| new.id == old.id)
+        {
+            Some(new) if asr_connection_test_fields_changed(old, new) => {
+                changed |= status.asr.remove(&old.id).is_some();
+            }
+            None => {
+                changed |= status.asr.remove(&old.id).is_some();
+            }
+            _ => {}
+        }
+    }
+
+    for old in &old_config.llm.connections {
+        match new_config
+            .llm
+            .connections
+            .iter()
+            .find(|new| new.id == old.id)
+        {
+            Some(new) if llm_connection_test_fields_changed(old, new) => {
+                changed |= status.llm.remove(&old.id).is_some();
+            }
+            None => {
+                changed |= status.llm.remove(&old.id).is_some();
+            }
+            _ => {}
+        }
+    }
+
+    let asr_ids: std::collections::BTreeSet<_> = new_config
+        .asr
+        .connections
+        .iter()
+        .map(|connection| connection.id.as_str())
+        .collect();
+    let before_asr = status.asr.len();
+    status.asr.retain(|id, _| asr_ids.contains(id.as_str()));
+    changed |= status.asr.len() != before_asr;
+
+    let llm_ids: std::collections::BTreeSet<_> = new_config
+        .llm
+        .connections
+        .iter()
+        .map(|connection| connection.id.as_str())
+        .collect();
+    let before_llm = status.llm.len();
+    status.llm.retain(|id, _| llm_ids.contains(id.as_str()));
+    changed |= status.llm.len() != before_llm;
+
+    changed
 }
 
 fn query_history(conn: &Connection, limit: usize) -> rusqlite::Result<Vec<HistoryEntry>> {
@@ -212,16 +458,156 @@ fn get_config(state: tauri::State<AppState>) -> AppConfig {
 }
 
 #[tauri::command]
+fn get_provider_connection_status(
+    state: tauri::State<AppState>,
+    kind: String,
+    connection_id: String,
+) -> Option<ProviderConnectionStatus> {
+    let store = load_provider_status(&state.provider_status_path);
+    provider_status_for_kind(&store, kind.trim())
+        .and_then(|statuses| statuses.get(connection_id.trim()).cloned())
+}
+
+#[tauri::command]
+async fn test_asr_connection(
+    app: tauri::AppHandle,
+    request: ConnectionTestRequest,
+) -> ConnectionTestResult {
+    let status_path = provider_status_path(&app);
+    let connection_id = request
+        .connection_id
+        .clone()
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .unwrap_or_else(|| "default".into());
+    let provider = request.provider.trim().to_string();
+    let result = match provider.as_str() {
+        "mock" => Ok("Mock ASR is available.".to_string()),
+        "openai-compatible" | "" => test_openai_compatible_asr(request).await,
+        other => Err(anyhow::anyhow!("unsupported ASR provider: {}", other)),
+    };
+    let mut result = connection_test_result(provider, result);
+    if result.ok && result.provider == "mock" {
+        result.message_key = Some("settings.mock_asr_ok".into());
+    }
+    result.tested_at = Some(chrono::Utc::now().to_rfc3339());
+    save_connection_test_status(&status_path, "asr", &connection_id, &result);
+    result
+}
+
+#[tauri::command]
+async fn test_llm_connection(
+    app: tauri::AppHandle,
+    request: ConnectionTestRequest,
+) -> ConnectionTestResult {
+    let status_path = provider_status_path(&app);
+    let connection_id = request
+        .connection_id
+        .clone()
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .unwrap_or_else(|| "default".into());
+    let provider = request.provider.trim().to_string();
+    let result = match provider.as_str() {
+        "mock" | "" => Ok("Mock LLM is available.".to_string()),
+        "openai-compatible" => test_openai_compatible_llm(request).await,
+        other => Err(anyhow::anyhow!("unsupported LLM provider: {}", other)),
+    };
+    let mut result = connection_test_result(provider, result);
+    if result.ok && result.provider == "mock" {
+        result.message_key = Some("settings.mock_llm_ok".into());
+    }
+    result.tested_at = Some(chrono::Utc::now().to_rfc3339());
+    save_connection_test_status(&status_path, "llm", &connection_id, &result);
+    result
+}
+
+fn save_connection_test_status(
+    path: &Path,
+    kind: &str,
+    connection_id: &str,
+    result: &ConnectionTestResult,
+) {
+    let mut store = load_provider_status(path);
+    if let Some(statuses) = provider_status_for_kind_mut(&mut store, kind) {
+        statuses.insert(connection_id.to_string(), test_result_to_status(result));
+        if let Err(e) = save_provider_status(path, &store) {
+            tracing::warn!(
+                "failed to save provider status to {}: {}",
+                path.display(),
+                e
+            );
+        }
+    }
+}
+
+async fn test_openai_compatible_asr(request: ConnectionTestRequest) -> anyhow::Result<String> {
+    let endpoint =
+        trimmed_option(request.endpoint).unwrap_or_else(|| "https://api.openai.com/v1".to_string());
+    let api_key = api_key_or_env(request.api_key);
+    let model = trimmed_option(request.model).unwrap_or_else(|| "whisper-1".to_string());
+    let mut provider = typex_core::typex_asr::openai_compat::OpenAiCompatibleAsrProvider::new(
+        endpoint, api_key, model,
+    );
+
+    if let Some(language) = trimmed_option(request.language) {
+        provider = provider.with_language(language);
+    }
+
+    let pcm = vec![0_u8; 16_000 * 2];
+    let wav = typex_core::typex_asr::pcm_to_wav(&pcm)?;
+    provider
+        .transcribe_file(wav, "typex-connection-test.wav")
+        .await?;
+
+    Ok("ASR connection OK.".to_string())
+}
+
+async fn test_openai_compatible_llm(request: ConnectionTestRequest) -> anyhow::Result<String> {
+    let endpoint =
+        trimmed_option(request.endpoint).unwrap_or_else(|| "https://api.openai.com/v1".to_string());
+    let api_key = api_key_or_env(request.api_key);
+    let model = trimmed_option(request.model).unwrap_or_else(|| "gpt-4o-mini".to_string());
+    let provider = typex_core::typex_llm::openai_compat::OpenAiCompatibleLlmProvider::new(
+        endpoint, api_key, model,
+    );
+
+    let input = stream::once(async { Ok("ping".to_string()) }).boxed();
+    let mut output = provider.optimize(input);
+    while let Some(item) = output.next().await {
+        let result = item?;
+        if result.is_final || !result.text.trim().is_empty() {
+            return Ok("LLM connection OK.".to_string());
+        }
+    }
+
+    anyhow::bail!("provider returned no response")
+}
+
+#[tauri::command]
 fn save_config(state: tauri::State<AppState>, mut config: AppConfig) -> Result<(), String> {
     config.normalize_connections_mut();
+    let old_config = state.config.lock().unwrap().clone();
 
     // 1. Persist config to disk FIRST — always save user settings
     config.save(&state.config_path).map_err(|e| e.to_string())?;
 
-    // 2. Update in-memory config immediately
+    // 2. Reset stale provider test status when connection settings changed
+    let mut provider_status = load_provider_status(&state.provider_status_path);
+    if reset_changed_provider_status(&old_config, &config, &mut provider_status)
+        && let Err(e) = save_provider_status(&state.provider_status_path, &provider_status)
+    {
+        tracing::warn!(
+            "failed to save provider status to {}: {}",
+            state.provider_status_path.display(),
+            e
+        );
+    }
+
+    // 3. Update in-memory config immediately
     *state.config.lock().unwrap() = config.clone();
 
-    // 3. Rebuild pipeline (non-fatal: keep old pipeline on failure)
+    // 4. Rebuild pipeline (non-fatal: keep old pipeline on failure)
     match build_pipeline(&config) {
         Ok(pipeline) => {
             *state.pipeline.lock().unwrap() = pipeline;
@@ -231,7 +617,7 @@ fn save_config(state: tauri::State<AppState>, mut config: AppConfig) -> Result<(
         }
     }
 
-    // 4. Update audio capture if not currently recording
+    // 5. Update audio capture if not currently recording
     let capture = typex_audio::MicrophoneCapture::new(config.audio.device.clone());
     if state.recording_stop.lock().unwrap().is_none() {
         state.capture.lock().unwrap().replace(capture);
@@ -724,6 +1110,9 @@ pub fn run() {
             minimize,
             close_window,
             get_config,
+            get_provider_connection_status,
+            test_asr_connection,
+            test_llm_connection,
             save_config,
             get_history,
             search_history,
@@ -739,6 +1128,7 @@ pub fn run() {
         .setup(move |app| {
             // Load or create config
             let cfg_path = config_path(app.handle());
+            let status_path = provider_status_path(app.handle());
             let config = if cfg_path.exists() {
                 AppConfig::load(&cfg_path).unwrap_or_else(|e| {
                     tracing::warn!("failed to load config from {}: {}", cfg_path.display(), e);
@@ -780,6 +1170,7 @@ pub fn run() {
             app.manage(AppState {
                 config: Mutex::new(config),
                 config_path: cfg_path.clone(),
+                provider_status_path: status_path,
                 db: Mutex::new(conn),
                 pipeline: Mutex::new(pipeline),
                 capture: Mutex::new(Some(capture)),
