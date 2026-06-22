@@ -30,6 +30,7 @@ struct AppState {
     config: Mutex<AppConfig>,
     config_path: std::path::PathBuf,
     provider_status_path: std::path::PathBuf,
+    provider_status: Mutex<ProviderStatusStore>,
     db: Mutex<Connection>,
     pipeline: Mutex<Arc<TypeX>>,
     capture: Mutex<Option<typex_audio::MicrophoneCapture>>,
@@ -463,7 +464,7 @@ fn get_provider_connection_status(
     kind: String,
     connection_id: String,
 ) -> Option<ProviderConnectionStatus> {
-    let store = load_provider_status(&state.provider_status_path);
+    let store = state.provider_status.lock().unwrap();
     provider_status_for_kind(&store, kind.trim())
         .and_then(|statuses| statuses.get(connection_id.trim()).cloned())
 }
@@ -473,7 +474,6 @@ async fn test_asr_connection(
     app: tauri::AppHandle,
     request: ConnectionTestRequest,
 ) -> ConnectionTestResult {
-    let status_path = provider_status_path(&app);
     let connection_id = request
         .connection_id
         .clone()
@@ -491,7 +491,8 @@ async fn test_asr_connection(
         result.message_key = Some("settings.mock_asr_ok".into());
     }
     result.tested_at = Some(chrono::Utc::now().to_rfc3339());
-    save_connection_test_status(&status_path, "asr", &connection_id, &result);
+    let state = app.state::<AppState>();
+    save_connection_test_status(&state, "asr", &connection_id, &result);
     result
 }
 
@@ -500,7 +501,6 @@ async fn test_llm_connection(
     app: tauri::AppHandle,
     request: ConnectionTestRequest,
 ) -> ConnectionTestResult {
-    let status_path = provider_status_path(&app);
     let connection_id = request
         .connection_id
         .clone()
@@ -518,23 +518,24 @@ async fn test_llm_connection(
         result.message_key = Some("settings.mock_llm_ok".into());
     }
     result.tested_at = Some(chrono::Utc::now().to_rfc3339());
-    save_connection_test_status(&status_path, "llm", &connection_id, &result);
+    let state = app.state::<AppState>();
+    save_connection_test_status(&state, "llm", &connection_id, &result);
     result
 }
 
 fn save_connection_test_status(
-    path: &Path,
+    state: &AppState,
     kind: &str,
     connection_id: &str,
     result: &ConnectionTestResult,
 ) {
-    let mut store = load_provider_status(path);
+    let mut store = state.provider_status.lock().unwrap();
     if let Some(statuses) = provider_status_for_kind_mut(&mut store, kind) {
         statuses.insert(connection_id.to_string(), test_result_to_status(result));
-        if let Err(e) = save_provider_status(path, &store) {
+        if let Err(e) = save_provider_status(&state.provider_status_path, &store) {
             tracing::warn!(
                 "failed to save provider status to {}: {}",
-                path.display(),
+                state.provider_status_path.display(),
                 e
             );
         }
@@ -593,7 +594,7 @@ fn save_config(state: tauri::State<AppState>, mut config: AppConfig) -> Result<(
     config.save(&state.config_path).map_err(|e| e.to_string())?;
 
     // 2. Reset stale provider test status when connection settings changed
-    let mut provider_status = load_provider_status(&state.provider_status_path);
+    let mut provider_status = state.provider_status.lock().unwrap();
     if reset_changed_provider_status(&old_config, &config, &mut provider_status)
         && let Err(e) = save_provider_status(&state.provider_status_path, &provider_status)
     {
@@ -1129,6 +1130,7 @@ pub fn run() {
             // Load or create config
             let cfg_path = config_path(app.handle());
             let status_path = provider_status_path(app.handle());
+            let provider_status = load_provider_status(&status_path);
             let config = if cfg_path.exists() {
                 AppConfig::load(&cfg_path).unwrap_or_else(|e| {
                     tracing::warn!("failed to load config from {}: {}", cfg_path.display(), e);
@@ -1171,6 +1173,7 @@ pub fn run() {
                 config: Mutex::new(config),
                 config_path: cfg_path.clone(),
                 provider_status_path: status_path,
+                provider_status: Mutex::new(provider_status),
                 db: Mutex::new(conn),
                 pipeline: Mutex::new(pipeline),
                 capture: Mutex::new(Some(capture)),

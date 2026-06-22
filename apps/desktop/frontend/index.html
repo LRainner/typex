@@ -1835,7 +1835,12 @@
 
     async function testAsrConnection() {
       if (!validateSettings()) return;
-      saveAsrConnectionFields();
+      setConnectionTestStatus('asr', 'testing', typexI18n.t('settings.connection_testing'), new Date().toISOString());
+      const saved = await saveConfig({ reloadConnectionStatus: false });
+      if (!saved) {
+        await loadConnectionTestStatus('asr');
+        return;
+      }
       setConnectionTestStatus('asr', 'testing', typexI18n.t('settings.connection_testing'), new Date().toISOString());
       try {
         const result = await invoke('test_asr_connection', { request: getAsrConnectionDraft() });
@@ -1852,7 +1857,12 @@
 
     async function testLlmConnection() {
       if (!validateSettings()) return;
-      saveLlmConnectionFields();
+      setConnectionTestStatus('llm', 'testing', typexI18n.t('settings.connection_testing'), new Date().toISOString());
+      const saved = await saveConfig({ reloadConnectionStatus: false });
+      if (!saved) {
+        await loadConnectionTestStatus('llm');
+        return;
+      }
       setConnectionTestStatus('llm', 'testing', typexI18n.t('settings.connection_testing'), new Date().toISOString());
       try {
         const result = await invoke('test_llm_connection', { request: getLlmConnectionDraft() });
@@ -1948,7 +1958,8 @@
       refreshConnectionTestTimes();
     }
 
-    async function saveConfig() {
+    async function saveConfig(options = {}) {
+      const reloadConnectionStatus = options.reloadConnectionStatus !== false;
       if (!currentConfig) return false;
       if (!validateSettings()) {
         setSaveStatus('error', 'settings.save_invalid');
@@ -1980,8 +1991,10 @@
 
       try {
         await invoke('save_config', { config: currentConfig });
-        loadConnectionTestStatus('asr');
-        loadConnectionTestStatus('llm');
+        if (reloadConnectionStatus) {
+          loadConnectionTestStatus('asr');
+          loadConnectionTestStatus('llm');
+        }
         if (seq === saveSeq) setSaveStatus('saved', 'settings.save_saved');
         return true;
       } catch (e) {
