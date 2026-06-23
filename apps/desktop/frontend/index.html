@@ -1405,6 +1405,21 @@
                   <div class="field-help" data-i18n="settings.performance_note"></div>
                 </div>
               </div>
+
+              <div class="settings-subsection">
+                <div class="subsection-title" data-i18n="settings.logging"></div>
+                <div class="field">
+                  <label class="field-label" for="logging-level" data-i18n="settings.logging_level"></label>
+                  <select id="logging-level">
+                    <option value="error" data-i18n="settings.log_level_error"></option>
+                    <option value="warn" data-i18n="settings.log_level_warn"></option>
+                    <option value="info" data-i18n="settings.log_level_info"></option>
+                    <option value="debug" data-i18n="settings.log_level_debug"></option>
+                    <option value="trace" data-i18n="settings.log_level_trace"></option>
+                  </select>
+                  <div class="field-help" data-i18n="settings.logging_help"></div>
+                </div>
+              </div>
             </div>
           </details>
 
@@ -1923,6 +1938,7 @@
 
       document.getElementById('injector-method').value = currentConfig.injector.method || 'clipboard';
       document.getElementById('pipeline-performance').value = currentConfig.pipeline.performance || 'balanced';
+      document.getElementById('logging-level').value = currentConfig.logging?.level || 'info';
 
       document.getElementById('history-log-limit').value = currentConfig.history.log_limit;
 
@@ -1982,6 +1998,8 @@
       if (document.getElementById('plugin-cleaner').checked) plugins.push('text_cleaner');
       currentConfig.pipeline.plugins = plugins;
       currentConfig.pipeline.performance = document.getElementById('pipeline-performance').value || 'balanced';
+      currentConfig.logging = currentConfig.logging || {};
+      currentConfig.logging.level = document.getElementById('logging-level').value || 'info';
 
       currentConfig.injector.method = document.getElementById('injector-method').value || 'clipboard';
       currentConfig.audio.device = document.getElementById('audio-device').value || null;
