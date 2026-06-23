@@ -10,6 +10,8 @@ use std::{
 use futures::{StreamExt, stream};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "macos")]
+use tauri::image::Image;
 use tauri::{
     Emitter, Manager, WindowEvent,
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -1203,8 +1205,17 @@ pub fn run() {
             let separator = PredefinedMenuItem::separator(app)?;
             let menu = Menu::with_items(app, &[&show_item, &separator, &quit_item])?;
 
+            #[cfg(target_os = "macos")]
+            let tray_icon = Image::from_bytes(include_bytes!("../icons/tray-template.png"))?;
+            #[cfg(not(target_os = "macos"))]
+            let tray_icon = app
+                .default_window_icon()
+                .cloned()
+                .ok_or("default window icon is missing")?;
+
             TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon(tray_icon)
+                .icon_as_template(cfg!(target_os = "macos"))
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .tooltip("TypeX")
