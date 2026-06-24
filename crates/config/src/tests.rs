@@ -65,6 +65,8 @@ fn test_llm_config_roundtrip_from_legacy_json() {
         Some("You are a helpful assistant.")
     );
 
+    assert_eq!(config.logging.level, LogLevel::Info);
+
     let toml_str = toml::to_string_pretty(&config).expect("AppConfig → TOML should work");
     assert!(toml_str.contains("connections"));
     assert!(toml_str.contains("active_connection"));
@@ -267,6 +269,17 @@ fn test_option_none_omitted_from_toml() {
         toml_str.contains("enabled"),
         "enabled bool should appear in TOML"
     );
+}
+
+#[test]
+fn test_logging_level_deserializes_from_config() {
+    let toml_str = r#"
+[logging]
+level = "debug"
+"#;
+
+    let config: AppConfig = toml::from_str(toml_str).unwrap();
+    assert_eq!(config.logging.level, LogLevel::Debug);
 }
 
 /// Verify that when the frontend sends `null` for an Option<String> field,

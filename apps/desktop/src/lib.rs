@@ -18,7 +18,8 @@ use tauri::{
     tray::TrayIconBuilder,
 };
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
-use typex_config::{AppConfig, AsrConnection, LlmConnection};
+use tracing_subscriber::{EnvFilter, Registry, prelude::*};
+use typex_config::{AppConfig, AsrConnection, LlmConnection, LogLevel};
 use typex_core::typex_asr::AsrProvider;
 use typex_core::typex_llm::LlmProvider;
 use typex_core::{TypeX, TypeXBuildOptions, build_typex_from_config};
@@ -27,6 +28,7 @@ use typex_core::{TypeX, TypeXBuildOptions, build_typex_from_config};
 /// Awaiting it yields the accumulator JoinHandle, which in turn yields the PCM data.
 type RecordingAccFuture =
     tokio::task::JoinHandle<anyhow::Result<tokio::task::JoinHandle<anyhow::Result<Vec<u8>>>>>;
+type LogReloadHandle = tracing_subscriber::reload::Handle<EnvFilter, Registry>;
 
 struct AppState {
     config: Mutex<AppConfig>,
@@ -46,6 +48,7 @@ struct AppState {
     overlay_save_token: AtomicU64,
     /// Prevents concurrent recording start attempts.
     recording_starting: AtomicBool,
+    log_filter: Option<LogReloadHandle>,
     /// Tokio runtime handle — needed because global shortcut callbacks run outside Tokio context.
     rt: tokio::runtime::Handle,
 }
@@ -69,6 +72,26 @@ fn db_path(app: &tauri::AppHandle) -> std::path::PathBuf {
         .app_config_dir()
         .expect("failed to resolve app config dir")
         .join("typex.db")
+}
+
+fn typex_log_filter(level: LogLevel) -> String {
+    let level = level.as_str();
+    format!(
+        "typex_desktop_lib={level},typex_desktop={level},typex_core={level},typex_pipeline={level},typex_asr={level},typex_llm={level},typex_plugin={level},typex_audio={level},typex_injector={level}"
+    )
+}
+
+fn env_filter_for_level(level: LogLevel) -> EnvFilter {
+    EnvFilter::new(typex_log_filter(level))
+}
+
+fn reload_log_filter(handle: &Option<LogReloadHandle>, level: LogLevel) {
+    let Some(handle) = handle else {
+        return;
+    };
+    if let Err(e) = handle.reload(env_filter_for_level(level)) {
+        tracing::warn!("failed to reload log filter: {}", e);
+    }
 }
 
 fn init_db(conn: &Connection) -> rusqlite::Result<()> {
@@ -612,6 +635,7 @@ fn save_config(state: tauri::State<AppState>, mut config: AppConfig) -> Result<(
     }
 
     // 3. Update in-memory config immediately
+    reload_log_filter(&state.log_filter, config.logging.level);
     *state.config.lock().unwrap() = config.clone();
 
     // 4. Rebuild pipeline (non-fatal: keep old pipeline on failure)
@@ -1100,11 +1124,22 @@ fn set_language(state: tauri::State<AppState>, language: String) -> Result<(), S
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize tracing subscriber so log messages are visible in console.
-    // Uses RUST_LOG env var for filtering (e.g. RUST_LOG=typex_audio=trace,typex_desktop=info).
-    // Falls back to "info" level if RUST_LOG is not set.
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
-    tracing_subscriber::fmt().with_env_filter(env_filter).init();
+    // RUST_LOG takes precedence over the UI-configured log level.
+    let log_filter = match EnvFilter::try_from_default_env() {
+        Ok(env_filter) => {
+            tracing_subscriber::fmt().with_env_filter(env_filter).init();
+            None
+        }
+        Err(_) => {
+            let (filter_layer, handle) =
+                tracing_subscriber::reload::Layer::new(env_filter_for_level(LogLevel::Info));
+            tracing_subscriber::registry()
+                .with(filter_layer)
+                .with(tracing_subscriber::fmt::layer())
+                .init();
+            Some(handle)
+        }
+    };
 
     // Create a dedicated Tokio runtime that lives for the entire application
     // lifetime (run() blocks until exit). Its handle is shared with global
@@ -1149,6 +1184,7 @@ pub fn run() {
                 }
                 config
             };
+            reload_log_filter(&log_filter, config.logging.level);
 
             let current_shortcut = config.shortcut.record.clone();
 
@@ -1189,6 +1225,7 @@ pub fn run() {
                 overlay_error_token: AtomicU64::new(0),
                 overlay_save_token: AtomicU64::new(0),
                 recording_starting: AtomicBool::new(false),
+                log_filter,
                 rt: rt.clone(),
             });
 

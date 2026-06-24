@@ -1,16 +1,21 @@
 use anyhow::Result;
 use tokio::io::AsyncBufReadExt;
 
-use typex_config::AppConfig;
+use typex_config::{AppConfig, LogLevel};
 use typex_core::{TypeXBuildOptions, build_typex_from_config};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter("typex=debug")
-        .init();
+    let config_path = std::path::Path::new("config.toml");
+    let config_exists = config_path.exists();
+    let config = load_config(config_path)?;
+    init_tracing(config.logging.level);
+    if config_exists {
+        tracing::info!("loaded config from {}", config_path.display());
+    } else {
+        tracing::info!("using default config");
+    }
 
-    let config = load_config()?;
     let input_file = parse_input_arg()?;
     let options = if input_file.is_some() {
         TypeXBuildOptions::file()
@@ -79,6 +84,19 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+fn init_tracing(level: LogLevel) {
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(typex_log_filter(level)));
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
+}
+
+fn typex_log_filter(level: LogLevel) -> String {
+    let level = level.as_str();
+    format!(
+        "typex={level},typex_cli={level},typex_core={level},typex_pipeline={level},typex_asr={level},typex_llm={level},typex_plugin={level},typex_audio={level},typex_injector={level}"
+    )
+}
+
 fn parse_input_arg() -> Result<Option<String>> {
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -92,14 +110,10 @@ fn parse_input_arg() -> Result<Option<String>> {
     Ok(None)
 }
 
-fn load_config() -> Result<AppConfig> {
-    let config_path = std::path::Path::new("config.toml");
+fn load_config(config_path: &std::path::Path) -> Result<AppConfig> {
     if config_path.exists() {
-        let config = AppConfig::load(config_path)?;
-        tracing::info!("loaded config from {}", config_path.display());
-        Ok(config)
+        AppConfig::load(config_path)
     } else {
-        tracing::info!("using default config");
         Ok(AppConfig::default())
     }
 }

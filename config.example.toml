@@ -33,6 +33,9 @@ provider = "mock"          # mock | openai-compatible
 performance = "balanced"   # low | balanced | high
 plugins = ["filler_remover", "text_cleaner"]
 
+[logging]
+level = "info"              # error | warn | info | debug | trace
+
 [injector]
 method = "clipboard"       # clipboard | platform
 

@@ -60,6 +60,7 @@ impl Pipeline {
             let plugins = plugins.clone();
             async move {
                 let asr_result = result?;
+                log_pipeline_text("asr", asr_result.is_final, &asr_result.text);
 
                 let text = apply_plugins(&asr_result.text, &asr_result, &plugins).await?;
 
@@ -76,35 +77,34 @@ impl Pipeline {
             plugin_stream.boxed()
         };
 
-        if let Some(injector) = injector {
-            let accumulated = Arc::new(std::sync::Mutex::new(String::new()));
-            final_stream
-                .then(move |result| {
-                    let injector = injector.clone();
-                    let accumulated = accumulated.clone();
-                    async move {
-                        let output = result?;
-                        let text_to_inject = {
-                            let mut acc = accumulated.lock().unwrap();
-                            acc.push_str(&output.text);
-                            if output.is_final {
-                                let text = acc.clone();
-                                acc.clear();
-                                Some(text)
-                            } else {
-                                None
-                            }
-                        };
-                        if let Some(text) = text_to_inject {
+        let accumulated = Arc::new(std::sync::Mutex::new(String::new()));
+        final_stream
+            .then(move |result| {
+                let injector = injector.clone();
+                let accumulated = accumulated.clone();
+                async move {
+                    let output = result?;
+                    let text_to_finalize = {
+                        let mut acc = accumulated.lock().unwrap();
+                        acc.push_str(&output.text);
+                        if output.is_final {
+                            let text = acc.clone();
+                            acc.clear();
+                            Some(text)
+                        } else {
+                            None
+                        }
+                    };
+                    if let Some(text) = text_to_finalize {
+                        log_pipeline_text("final", true, &text);
+                        if let Some(injector) = injector {
                             Self::inject_text(injector, text).await;
                         }
-                        Ok(output)
                     }
-                })
-                .boxed()
-        } else {
-            final_stream
-        }
+                    Ok(output)
+                }
+            })
+            .boxed()
     }
 
     pub async fn run_session(&self, pcm_data: Vec<u8>) -> Result<PipelineOutput> {
@@ -131,27 +131,28 @@ impl Pipeline {
     }
 
     async fn process_text(&self, asr_result: AsrResult) -> Result<PipelineOutput> {
+        log_pipeline_text("asr", asr_result.is_final, &asr_result.text);
         let text = apply_plugins(&asr_result.text, &asr_result, &self.plugins).await?;
 
         let final_text = match &self.llm {
             Some(llm) => {
+                log_pipeline_text("llm_input", true, &text);
                 let input = futures::stream::once(async move { Ok(text) }).boxed();
                 let mut output = llm.optimize(input);
                 let mut optimized = String::new();
                 while let Some(res) = output.next().await {
-                    let chunk = res?.text.trim().to_string();
-                    if !chunk.is_empty() {
-                        if !optimized.is_empty() {
-                            optimized.push(' ');
-                        }
-                        optimized.push_str(&chunk);
-                    }
+                    let llm_result = res?;
+                    log_pipeline_text("llm_output", llm_result.is_final, &llm_result.text);
+                    optimized.push_str(&llm_result.text);
                 }
+                let optimized = optimized.trim().to_string();
+                log_pipeline_text("llm_output_final", true, &optimized);
                 optimized
             }
             None => text,
         };
 
+        log_pipeline_text("final", true, &final_text);
         if let Some(ref inj) = self.injector {
             Self::inject_text(inj.clone(), final_text.clone()).await;
         }
@@ -172,6 +173,7 @@ impl Pipeline {
             let tx = tx.clone();
             async move {
                 if let Ok(output) = item {
+                    log_pipeline_text("llm_input", output.is_final, &output.text);
                     let _ = tx.send(output.text).await;
                 }
             }
@@ -185,6 +187,7 @@ impl Pipeline {
 
         let merged = llm_output.map(|r| {
             let lr = r?;
+            log_pipeline_text("llm_output", lr.is_final, &lr.text);
             Ok(PipelineOutput {
                 text: lr.text,
                 is_final: lr.is_final,
@@ -208,6 +211,24 @@ async fn apply_plugins(
     };
     for plugin in plugins {
         result = plugin.process(&result, &ctx).await?;
+        tracing::debug!(
+            target: "typex_pipeline",
+            stage = "plugin",
+            plugin = plugin.name(),
+            is_final = ctx.is_final,
+            text = %result,
+            "pipeline text"
+        );
     }
     Ok(result)
+}
+
+fn log_pipeline_text(stage: &'static str, is_final: bool, text: &str) {
+    tracing::debug!(
+        target: "typex_pipeline",
+        stage,
+        is_final,
+        text = %text,
+        "pipeline text"
+    );
 }
