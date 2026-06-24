@@ -6,8 +6,15 @@ use typex_core::{TypeXBuildOptions, build_typex_from_config};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let config = load_config()?;
+    let config_path = std::path::Path::new("config.toml");
+    let config_exists = config_path.exists();
+    let config = load_config(config_path)?;
     init_tracing(config.logging.level);
+    if config_exists {
+        tracing::info!("loaded config from {}", config_path.display());
+    } else {
+        tracing::info!("using default config");
+    }
 
     let input_file = parse_input_arg()?;
     let options = if input_file.is_some() {
@@ -103,14 +110,10 @@ fn parse_input_arg() -> Result<Option<String>> {
     Ok(None)
 }
 
-fn load_config() -> Result<AppConfig> {
-    let config_path = std::path::Path::new("config.toml");
+fn load_config(config_path: &std::path::Path) -> Result<AppConfig> {
     if config_path.exists() {
-        let config = AppConfig::load(config_path)?;
-        tracing::info!("loaded config from {}", config_path.display());
-        Ok(config)
+        AppConfig::load(config_path)
     } else {
-        tracing::info!("using default config");
         Ok(AppConfig::default())
     }
 }

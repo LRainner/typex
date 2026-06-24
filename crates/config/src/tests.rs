@@ -65,7 +65,7 @@ fn test_llm_config_roundtrip_from_legacy_json() {
         Some("You are a helpful assistant.")
     );
 
-    assert_eq!(config.logging.level.as_str(), "info");
+    assert_eq!(config.logging.level, LogLevel::Info);
 
     let toml_str = toml::to_string_pretty(&config).expect("AppConfig → TOML should work");
     assert!(toml_str.contains("connections"));
@@ -279,7 +279,7 @@ level = "debug"
 "#;
 
     let config: AppConfig = toml::from_str(toml_str).unwrap();
-    assert_eq!(config.logging.level.as_str(), "debug");
+    assert_eq!(config.logging.level, LogLevel::Debug);
 }
 
 /// Verify that when the frontend sends `null` for an Option<String> field,
