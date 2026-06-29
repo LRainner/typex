@@ -14,4 +14,5 @@ reqwest = { workspace = true }
 hound = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+typex-logging = { workspace = true }
 tracing = { workspace = true }

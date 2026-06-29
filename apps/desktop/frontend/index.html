@@ -1419,6 +1419,20 @@
                   </select>
                   <div class="field-help" data-i18n="settings.logging_help"></div>
                 </div>
+                <div class="toggle-row">
+                  <label class="toggle" for="logging-record-text">
+                    <input type="checkbox" id="logging-record-text" />
+                    <span class="slider"></span>
+                  </label>
+                  <div class="toggle-copy">
+                    <label class="toggle-label" for="logging-record-text" data-i18n="settings.logging_record_text"></label>
+                    <div class="field-help" data-i18n="settings.logging_record_text_help"></div>
+                  </div>
+                </div>
+                <div class="field">
+                  <button class="btn-action" type="button" id="open-log-dir" data-i18n="settings.open_log_dir"></button>
+                  <div class="field-help" data-i18n="settings.open_log_dir_help"></div>
+                </div>
               </div>
             </div>
           </details>
@@ -1939,6 +1953,7 @@
       document.getElementById('injector-method').value = currentConfig.injector.method || 'clipboard';
       document.getElementById('pipeline-performance').value = currentConfig.pipeline.performance || 'balanced';
       document.getElementById('logging-level').value = currentConfig.logging?.level || 'info';
+      document.getElementById('logging-record-text').checked = !!currentConfig.logging?.record_text;
 
       document.getElementById('history-log-limit').value = currentConfig.history.log_limit;
 
@@ -2000,6 +2015,7 @@
       currentConfig.pipeline.performance = document.getElementById('pipeline-performance').value || 'balanced';
       currentConfig.logging = currentConfig.logging || {};
       currentConfig.logging.level = document.getElementById('logging-level').value || 'info';
+      currentConfig.logging.record_text = document.getElementById('logging-record-text').checked;
 
       currentConfig.injector.method = document.getElementById('injector-method').value || 'clipboard';
       currentConfig.audio.device = document.getElementById('audio-device').value || null;
@@ -2072,6 +2088,15 @@
         saveConfig();
       });
     });
+    document.getElementById('open-log-dir').addEventListener('click', async () => {
+      try {
+        await invoke('open_log_dir');
+      } catch (e) {
+        console.error(e);
+        setSaveStatus('error', 'settings.save_error');
+      }
+    });
+
     document.getElementById('asr-connection-add').addEventListener('click', () => {
       saveAsrConnectionFields();
       const id = createConnectionId('asr');

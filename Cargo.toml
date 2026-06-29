@@ -7,6 +7,7 @@ members = [
     "crates/pipeline",
     "crates/injector",
     "crates/config",
+    "crates/logging",
     "crates/plugin",
     "crates/audio",
     "apps/cli",
@@ -29,7 +30,8 @@ toml = "0.8"
 anyhow = "1"
 thiserror = "2"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "chrono"] }
+tracing-appender = "0.2"
 async-trait = "0.1"
 bytes = "1"
 hound = "3.5"
@@ -49,5 +51,6 @@ typex-llm = { path = "crates/llm" }
 typex-pipeline = { path = "crates/pipeline" }
 typex-injector = { path = "crates/injector" }
 typex-config = { path = "crates/config" }
+typex-logging = { path = "crates/logging" }
 typex-plugin = { path = "crates/plugin" }
 typex-audio = { path = "crates/audio" }

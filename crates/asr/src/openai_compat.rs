@@ -83,7 +83,22 @@ impl AsrProvider for OpenAiCompatibleAsrProvider {
             form = form.text("language", lang.clone());
         }
 
+        typex_logging::log_target!(
+            tracing::Level::DEBUG,
+            target: "typex_asr",
+            format!(
+                "ASR transcription request started filename={} model={} endpoint={}",
+                filename, self.model, self.endpoint
+            ),
+        );
         let text = post_transcription(&self.client, &url, self.api_key.as_deref(), form).await?;
+        typex_logging::log_target!(
+            tracing::Level::DEBUG,
+            target: "typex_asr",
+            "ASR transcription request completed filename={} text_len={}",
+            filename,
+            text.len()
+        );
         Ok(AsrResult {
             text,
             is_final: true,
@@ -219,7 +234,24 @@ async fn transcribe_segment(
         form = form.text("language", lang.clone());
     }
 
-    post_transcription(client, &url, api_key, form).await
+    typex_logging::log_target!(
+        tracing::Level::DEBUG,
+        target: "typex_asr",
+        format!(
+            "ASR segment transcription started model={} endpoint={} pcm_bytes={}",
+            model,
+            endpoint,
+            pcm_data.len()
+        ),
+    );
+    let text = post_transcription(client, &url, api_key, form).await?;
+    typex_logging::log_target!(
+        tracing::Level::DEBUG,
+        target: "typex_asr",
+        "ASR segment transcription completed text_len={}",
+        text.len()
+    );
+    Ok(text)
 }
 
 fn transcription_url(endpoint: &str) -> String {
@@ -241,7 +273,11 @@ async fn post_transcription(
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("API error {}: {}", status, body);
+        anyhow::bail!(
+            "API error {}: {}",
+            status,
+            typex_logging::text_preview(&body, 200)
+        );
     }
 
     let result: TranscriptionResponse = resp.json().await?;

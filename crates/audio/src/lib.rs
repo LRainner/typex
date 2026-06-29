@@ -6,6 +6,7 @@ use cpal::Sample;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use futures::stream::BoxStream;
 use rubato::Resampler;
+use tracing::Level;
 
 const TARGET_SAMPLE_RATE: u32 = 16000;
 
@@ -46,7 +47,11 @@ impl MicrophoneCapture {
     /// Start continuous streaming capture.
     pub fn start(&self) -> Result<(cpal::Stream, BoxStream<'static, Result<Bytes>>)> {
         let (stream, raw_rx, info) = self.setup_device_and_stream()?;
-        tracing::info!("microphone capture started, press Ctrl+C to stop");
+        typex_logging::log_target!(
+            Level::INFO,
+            target: "typex_audio",
+            "microphone capture started, press Ctrl+C to stop"
+        );
         let (out_tx, out_rx) = tokio::sync::mpsc::channel::<Result<Bytes>>(32);
         spawn_resample_task(raw_rx, info, out_tx, None);
         let stream_out =
@@ -65,7 +70,11 @@ impl MicrophoneCapture {
         level_tx: Option<tokio::sync::mpsc::Sender<AudioLevel>>,
     ) -> Result<SessionRecorder> {
         let (stream, raw_rx, info) = self.setup_device_and_stream()?;
-        tracing::info!("session recording started");
+        typex_logging::log_target!(
+            Level::INFO,
+            target: "typex_audio",
+            "session recording started"
+        );
         let (out_tx, mut out_rx) = tokio::sync::mpsc::channel::<Result<Bytes>>(32);
         spawn_resample_task(raw_rx, info, out_tx, level_tx);
 
@@ -114,12 +123,19 @@ impl MicrophoneCapture {
             .description()
             .map(|d| d.to_string())
             .unwrap_or_default();
-        tracing::info!("using audio device: {}", device_desc);
+        typex_logging::log_target!(
+            Level::INFO,
+            target: "typex_audio",
+            "using audio device: {}",
+            device_desc
+        );
 
         let supported_config = device.default_input_config()?;
         let input_sample_rate: u32 = supported_config.sample_rate();
         let channels = supported_config.channels() as usize;
-        tracing::info!(
+        typex_logging::log_target!(
+            Level::INFO,
+            target: "typex_audio",
             "device sample rate: {}Hz, channels: {}, sample format: {:?}, target: {}Hz",
             input_sample_rate,
             channels,
@@ -340,12 +356,15 @@ where
                 .iter()
                 .map(|&sample| sample.to_sample::<f32>())
                 .collect();
-            if tx.try_send(samples).is_err() {
-                tracing::trace!("dropping audio input chunk because raw channel is full");
-            }
+            let _ = tx.try_send(samples);
         },
         |err| {
-            tracing::error!("audio capture error: {}", err);
+            typex_logging::log_target!(
+                Level::ERROR,
+                target: "typex_audio",
+                "audio capture error: {}",
+                err
+            );
         },
         None,
     )?;
@@ -400,7 +419,6 @@ where
 {
     if let Some(tx) = level_tx {
         let level = audio_level(samples);
-        tracing::trace!("audio level: rms={:.4}, peak={:.4}", level.rms, level.peak);
         if tx.try_send(level).is_err() && tx.is_closed() {
             *level_tx = None;
         }

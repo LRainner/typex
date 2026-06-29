@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 tokio = { workspace = true }
+typex-logging = { workspace = true }
 tracing = { workspace = true }
 arboard = "3"
 enigo = "0.6"

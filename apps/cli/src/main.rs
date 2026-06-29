@@ -1,6 +1,7 @@
 use anyhow::Result;
 use tokio::io::AsyncBufReadExt;
 
+use tracing::Level;
 use typex_config::{AppConfig, LogLevel};
 use typex_core::{TypeXBuildOptions, build_typex_from_config};
 
@@ -11,9 +12,14 @@ async fn main() -> Result<()> {
     let config = load_config(config_path)?;
     init_tracing(config.logging.level);
     if config_exists {
-        tracing::info!("loaded config from {}", config_path.display());
+        typex_logging::log_target!(
+            Level::INFO,
+            target: "typex_cli",
+            "loaded config from {}",
+            config_path.display()
+        );
     } else {
-        tracing::info!("using default config");
+        typex_logging::log_target!(Level::INFO, target: "typex_cli", "using default config");
     }
 
     let input_file = parse_input_arg()?;
@@ -33,7 +39,13 @@ async fn main() -> Result<()> {
             .filter(|s| !s.is_empty())
             .unwrap_or("audio.wav");
 
-        tracing::info!("transcribing {} ({} bytes)", filename, file_data.len());
+        typex_logging::log_target!(
+            Level::INFO,
+            target: "typex_cli",
+            "transcribing {} ({} bytes)",
+            filename,
+            file_data.len()
+        );
         let result = typex.run_file(file_data, filename).await?;
         if result.text.is_empty() {
             println!("(no speech detected)");
@@ -65,7 +77,12 @@ async fn main() -> Result<()> {
                 .ok_or_else(|| anyhow::anyhow!("stdin closed"))?;
 
             let pcm = recorder.stop().await?;
-            tracing::info!("captured {} bytes of PCM audio", pcm.len());
+            typex_logging::log_target!(
+                Level::DEBUG,
+                target: "typex_cli",
+                "captured {} bytes of PCM audio",
+                pcm.len()
+            );
 
             if pcm.is_empty() {
                 println!("(no audio captured)");
@@ -85,16 +102,11 @@ async fn main() -> Result<()> {
 }
 
 fn init_tracing(level: LogLevel) {
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(typex_log_filter(level)));
+    let env_filter = tracing_subscriber::EnvFilter::new(typex_logging::build_filter(
+        level.as_str(),
+        &["typex_cli"],
+    ));
     tracing_subscriber::fmt().with_env_filter(env_filter).init();
-}
-
-fn typex_log_filter(level: LogLevel) -> String {
-    let level = level.as_str();
-    format!(
-        "typex={level},typex_cli={level},typex_core={level},typex_pipeline={level},typex_asr={level},typex_llm={level},typex_plugin={level},typex_audio={level},typex_injector={level}"
-    )
 }
 
 fn parse_input_arg() -> Result<Option<String>> {

@@ -12,4 +12,5 @@ audioadapter-buffers = "3.0.0"
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 futures = { workspace = true }
+typex-logging = { workspace = true }
 tracing = { workspace = true }

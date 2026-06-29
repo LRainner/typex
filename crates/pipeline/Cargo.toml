@@ -8,6 +8,7 @@ typex-asr = { workspace = true }
 typex-llm = { workspace = true }
 typex-plugin = { workspace = true }
 typex-injector = { workspace = true }
+typex-logging = { workspace = true }
 anyhow = { workspace = true }
 bytes = { workspace = true }
 tokio = { workspace = true }

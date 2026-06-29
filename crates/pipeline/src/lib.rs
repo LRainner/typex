@@ -2,6 +2,7 @@ use anyhow::Result;
 use futures::stream::{BoxStream, StreamExt};
 use std::sync::Arc;
 
+use tracing::Level;
 use typex_asr::{AsrProvider, AsrResult};
 use typex_injector::Injector;
 use typex_llm::LlmProvider;
@@ -18,6 +19,7 @@ pub struct Pipeline {
     llm: Option<Arc<dyn LlmProvider>>,
     plugins: Vec<Arc<dyn Plugin>>,
     injector: Option<Arc<dyn Injector>>,
+    log_text: bool,
 }
 
 impl Pipeline {
@@ -27,6 +29,7 @@ impl Pipeline {
             llm: None,
             plugins: Vec::new(),
             injector: None,
+            log_text: false,
         }
     }
 
@@ -45,6 +48,11 @@ impl Pipeline {
         self
     }
 
+    pub fn with_log_text(mut self, log_text: bool) -> Self {
+        self.log_text = log_text;
+        self
+    }
+
     pub fn run(
         &self,
         audio: BoxStream<'static, Result<bytes::Bytes>>,
@@ -53,6 +61,7 @@ impl Pipeline {
         let llm = self.llm.clone();
         let plugins = self.plugins.clone();
         let injector = self.injector.clone();
+        let log_text = self.log_text;
 
         let asr_stream = asr.transcribe(audio);
 
@@ -60,9 +69,16 @@ impl Pipeline {
             let plugins = plugins.clone();
             async move {
                 let asr_result = result?;
-                log_pipeline_text("asr", asr_result.is_final, &asr_result.text);
+                log_pipeline_text(
+                    Level::DEBUG,
+                    "asr",
+                    asr_result.is_final,
+                    None,
+                    &asr_result.text,
+                    log_text,
+                );
 
-                let text = apply_plugins(&asr_result.text, &asr_result, &plugins).await?;
+                let text = apply_plugins(&asr_result.text, &asr_result, &plugins, log_text).await?;
 
                 Ok(PipelineOutput {
                     text,
@@ -72,7 +88,7 @@ impl Pipeline {
         });
 
         let final_stream = if let Some(llm) = llm {
-            Self::attach_llm(plugin_stream, llm).boxed()
+            Self::attach_llm(plugin_stream, llm, log_text).boxed()
         } else {
             plugin_stream.boxed()
         };
@@ -96,7 +112,7 @@ impl Pipeline {
                         }
                     };
                     if let Some(text) = text_to_finalize {
-                        log_pipeline_text("final", true, &text);
+                        log_pipeline_text(Level::DEBUG, "final", true, None, &text, log_text);
                         if let Some(injector) = injector {
                             Self::inject_text(injector, text).await;
                         }
@@ -126,33 +142,67 @@ impl Pipeline {
             .await
             .unwrap_or_else(|e| Err(anyhow::anyhow!("injector task failed: {}", e)));
         if let Err(e) = result {
-            tracing::warn!("injector failed: {}", e);
+            typex_logging::log_target!(
+                Level::WARN,
+                target: "typex_pipeline",
+                "injector failed: {}",
+                e
+            );
         }
     }
 
     async fn process_text(&self, asr_result: AsrResult) -> Result<PipelineOutput> {
-        log_pipeline_text("asr", asr_result.is_final, &asr_result.text);
-        let text = apply_plugins(&asr_result.text, &asr_result, &self.plugins).await?;
+        log_pipeline_text(
+            Level::DEBUG,
+            "asr",
+            asr_result.is_final,
+            None,
+            &asr_result.text,
+            self.log_text,
+        );
+        let text =
+            apply_plugins(&asr_result.text, &asr_result, &self.plugins, self.log_text).await?;
 
         let final_text = match &self.llm {
             Some(llm) => {
-                log_pipeline_text("llm_input", true, &text);
+                log_pipeline_text(Level::DEBUG, "llm_input", true, None, &text, self.log_text);
                 let input = futures::stream::once(async move { Ok(text) }).boxed();
                 let mut output = llm.optimize(input);
                 let mut optimized = String::new();
                 while let Some(res) = output.next().await {
                     let llm_result = res?;
-                    log_pipeline_text("llm_output", llm_result.is_final, &llm_result.text);
+                    log_pipeline_text(
+                        Level::TRACE,
+                        "llm_output",
+                        llm_result.is_final,
+                        None,
+                        &llm_result.text,
+                        self.log_text,
+                    );
                     optimized.push_str(&llm_result.text);
                 }
                 let optimized = optimized.trim().to_string();
-                log_pipeline_text("llm_output_final", true, &optimized);
+                log_pipeline_text(
+                    Level::DEBUG,
+                    "llm_output_final",
+                    true,
+                    None,
+                    &optimized,
+                    self.log_text,
+                );
                 optimized
             }
             None => text,
         };
 
-        log_pipeline_text("final", true, &final_text);
+        log_pipeline_text(
+            Level::DEBUG,
+            "final",
+            true,
+            None,
+            &final_text,
+            self.log_text,
+        );
         if let Some(ref inj) = self.injector {
             Self::inject_text(inj.clone(), final_text.clone()).await;
         }
@@ -166,6 +216,7 @@ impl Pipeline {
     fn attach_llm(
         input: impl futures::Stream<Item = Result<PipelineOutput>> + Send + 'static,
         llm: Arc<dyn LlmProvider>,
+        log_text: bool,
     ) -> BoxStream<'static, Result<PipelineOutput>> {
         let (tx, rx) = tokio::sync::mpsc::channel::<String>(32);
 
@@ -173,7 +224,14 @@ impl Pipeline {
             let tx = tx.clone();
             async move {
                 if let Ok(output) = item {
-                    log_pipeline_text("llm_input", output.is_final, &output.text);
+                    log_pipeline_text(
+                        Level::DEBUG,
+                        "llm_input",
+                        output.is_final,
+                        None,
+                        &output.text,
+                        log_text,
+                    );
                     let _ = tx.send(output.text).await;
                 }
             }
@@ -185,9 +243,16 @@ impl Pipeline {
 
         let llm_output = llm.optimize(llm_input);
 
-        let merged = llm_output.map(|r| {
+        let merged = llm_output.map(move |r| {
             let lr = r?;
-            log_pipeline_text("llm_output", lr.is_final, &lr.text);
+            log_pipeline_text(
+                Level::TRACE,
+                "llm_output",
+                lr.is_final,
+                None,
+                &lr.text,
+                log_text,
+            );
             Ok(PipelineOutput {
                 text: lr.text,
                 is_final: lr.is_final,
@@ -200,10 +265,35 @@ impl Pipeline {
     }
 }
 
+fn log_pipeline_text(
+    level: Level,
+    stage: &'static str,
+    is_final: bool,
+    plugin: Option<&str>,
+    text: &str,
+    record_text: bool,
+) {
+    let message = match plugin {
+        Some(plugin) => format!(
+            "pipeline text stage={} plugin={} is_final={}",
+            stage, plugin, is_final
+        ),
+        None => format!("pipeline text stage={} is_final={}", stage, is_final),
+    };
+    typex_logging::log_text_target!(
+        level,
+        target: "typex_pipeline",
+        message,
+        text,
+        record_text,
+    );
+}
+
 async fn apply_plugins(
     text: &str,
     asr_result: &AsrResult,
     plugins: &[Arc<dyn Plugin>],
+    log_text: bool,
 ) -> Result<String> {
     let mut result = text.to_string();
     let ctx = PluginContext {
@@ -211,24 +301,14 @@ async fn apply_plugins(
     };
     for plugin in plugins {
         result = plugin.process(&result, &ctx).await?;
-        tracing::debug!(
-            target: "typex_pipeline",
-            stage = "plugin",
-            plugin = plugin.name(),
-            is_final = ctx.is_final,
-            text = %result,
-            "pipeline text"
+        log_pipeline_text(
+            Level::DEBUG,
+            "plugin",
+            ctx.is_final,
+            Some(plugin.name()),
+            &result,
+            log_text,
         );
     }
     Ok(result)
-}
-
-fn log_pipeline_text(stage: &'static str, is_final: bool, text: &str) {
-    tracing::debug!(
-        target: "typex_pipeline",
-        stage,
-        is_final,
-        text = %text,
-        "pipeline text"
-    );
 }

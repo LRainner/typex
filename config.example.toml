@@ -35,6 +35,7 @@ plugins = ["filler_remover", "text_cleaner"]
 
 [logging]
 level = "info"              # error | warn | info | debug | trace
+record_text = false          # true logs raw ASR/plugin/LLM/final text; may contain dictated content
 
 [injector]
 method = "clipboard"       # clipboard | platform

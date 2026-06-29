@@ -4,6 +4,7 @@ use bytes::Bytes;
 use futures::StreamExt;
 use futures::stream::BoxStream;
 use serde::{Deserialize, Serialize};
+use tracing::Level;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AsrResult {
@@ -69,7 +70,9 @@ pub fn pcm_to_wav(pcm: &[u8]) -> Result<Vec<u8>> {
         let mut writer = hound::WavWriter::new(&mut cursor, spec)
             .map_err(|e| anyhow::anyhow!("wav writer init failed: {}", e))?;
         if !pcm.len().is_multiple_of(2) {
-            tracing::warn!(
+            typex_logging::log_target!(
+                Level::WARN,
+                target: "typex_asr",
                 "odd-length PCM data ({} bytes), dropping last byte",
                 pcm.len()
             );

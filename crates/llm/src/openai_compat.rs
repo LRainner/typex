@@ -115,6 +115,15 @@ impl LlmProvider for OpenAiCompatibleLlmProvider {
                 return;
             }
 
+            typex_logging::log_target!(
+                tracing::Level::DEBUG,
+                target: "typex_llm",
+                "LLM optimization request started model={} endpoint={} input_len={}",
+                model,
+                endpoint,
+                input.len()
+            );
+
             // ── 2. Build request body ──
             let body = serde_json::json!({
                 "model": model,
@@ -153,7 +162,11 @@ impl LlmProvider for OpenAiCompatibleLlmProvider {
             if !status.is_success() {
                 let body = resp.text().await.unwrap_or_default();
                 let _ = tx
-                    .send(Err(anyhow::anyhow!("LLM API error {}: {}", status, body)))
+                    .send(Err(anyhow::anyhow!(
+                        "LLM API error {}: {}",
+                        status,
+                        typex_logging::text_preview(&body, 200)
+                    )))
                     .await;
                 return;
             }
@@ -165,6 +178,7 @@ impl LlmProvider for OpenAiCompatibleLlmProvider {
             // codepoint with U+FFFD and the character would be lost forever).
             let mut stream = resp.bytes_stream();
             let mut buf: Vec<u8> = Vec::new();
+            let mut output_len = 0usize;
 
             'stream: while let Some(result) = stream.next().await {
                 let bytes = match result {
@@ -202,28 +216,40 @@ impl LlmProvider for OpenAiCompatibleLlmProvider {
                                     .first()
                                     .and_then(|c| c.delta.as_ref())
                                     .and_then(|d| d.content.as_deref())
-                                    && tx
+                                {
+                                    output_len += content.len();
+                                    if tx
                                         .send(Ok(LlmResult {
                                             text: content.to_string(),
                                             is_final: false,
                                         }))
                                         .await
                                         .is_err()
-                                {
-                                    return; // receiver dropped
+                                    {
+                                        return; // receiver dropped
+                                    }
                                 }
                             }
                             Err(e) => {
-                                tracing::warn!(
-                                    "failed to parse SSE chunk: {} (data: {})",
+                                typex_logging::log_target!(
+                                    tracing::Level::WARN,
+                                    target: "typex_llm",
+                                    "failed to parse SSE chunk error={} data_len={}",
                                     e,
-                                    &data[..data.len().min(200)]
+                                    data.len()
                                 );
                             }
                         }
                     }
                 }
             }
+
+            typex_logging::log_target!(
+                tracing::Level::DEBUG,
+                target: "typex_llm",
+                "LLM optimization stream completed output_len={}",
+                output_len
+            );
 
             // ── 5. Final marker ──
             let _ = tx

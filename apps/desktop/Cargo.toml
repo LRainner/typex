@@ -14,6 +14,7 @@ tauri-build = { workspace = true }
 typex-core = { workspace = true }
 typex-config = { workspace = true }
 typex-audio = { workspace = true }
+typex-logging = { workspace = true }
 anyhow = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
@@ -25,4 +26,5 @@ log = { workspace = true }
 rusqlite = { workspace = true }
 chrono = "0.4"
 tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
 futures = { workspace = true }
