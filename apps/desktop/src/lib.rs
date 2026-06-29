@@ -18,6 +18,7 @@ use tauri::{
     tray::TrayIconBuilder,
 };
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tracing::Level;
 use tracing_subscriber::{EnvFilter, Registry, prelude::*};
 use typex_config::{AppConfig, AsrConnection, LlmConnection, LogLevel};
 use typex_core::typex_asr::AsrProvider;
@@ -29,6 +30,7 @@ use typex_core::{TypeX, TypeXBuildOptions, build_typex_from_config};
 type RecordingAccFuture =
     tokio::task::JoinHandle<anyhow::Result<tokio::task::JoinHandle<anyhow::Result<Vec<u8>>>>>;
 type LogReloadHandle = tracing_subscriber::reload::Handle<EnvFilter, Registry>;
+type LogWorkerGuard = tracing_appender::non_blocking::WorkerGuard;
 
 struct AppState {
     config: Mutex<AppConfig>,
@@ -48,7 +50,8 @@ struct AppState {
     overlay_save_token: AtomicU64,
     /// Prevents concurrent recording start attempts.
     recording_starting: AtomicBool,
-    log_filter: Option<LogReloadHandle>,
+    log_filter: LogReloadHandle,
+    _log_guard: LogWorkerGuard,
     /// Tokio runtime handle — needed because global shortcut callbacks run outside Tokio context.
     rt: tokio::runtime::Handle,
 }
@@ -67,6 +70,15 @@ fn provider_status_path(app: &tauri::AppHandle) -> std::path::PathBuf {
         .join("provider_status.json")
 }
 
+fn log_dir(app: &tauri::AppHandle) -> std::path::PathBuf {
+    app.path().app_log_dir().unwrap_or_else(|_| {
+        app.path()
+            .app_config_dir()
+            .expect("failed to resolve app config dir")
+            .join("logs")
+    })
+}
+
 fn db_path(app: &tauri::AppHandle) -> std::path::PathBuf {
     app.path()
         .app_config_dir()
@@ -74,24 +86,52 @@ fn db_path(app: &tauri::AppHandle) -> std::path::PathBuf {
         .join("typex.db")
 }
 
-fn typex_log_filter(level: LogLevel) -> String {
-    let level = level.as_str();
-    format!(
-        "typex_desktop_lib={level},typex_desktop={level},typex_core={level},typex_pipeline={level},typex_asr={level},typex_llm={level},typex_plugin={level},typex_audio={level},typex_injector={level}"
-    )
-}
-
 fn env_filter_for_level(level: LogLevel) -> EnvFilter {
-    EnvFilter::new(typex_log_filter(level))
+    EnvFilter::new(typex_logging::build_filter(
+        level.as_str(),
+        &["typex_desktop_lib", "typex_desktop"],
+    ))
 }
 
-fn reload_log_filter(handle: &Option<LogReloadHandle>, level: LogLevel) {
-    let Some(handle) = handle else {
-        return;
-    };
+fn reload_log_filter(handle: &LogReloadHandle, level: LogLevel) {
     if let Err(e) = handle.reload(env_filter_for_level(level)) {
-        tracing::warn!("failed to reload log filter: {}", e);
+        typex_logging::log_target!(
+            Level::WARN,
+            target: "typex_desktop_lib",
+            "failed to reload log filter: {}",
+            e
+        );
     }
+}
+
+fn init_tracing(log_dir: std::path::PathBuf, level: LogLevel) -> (LogReloadHandle, LogWorkerGuard) {
+    if let Err(e) = std::fs::create_dir_all(&log_dir) {
+        eprintln!(
+            "failed to create log directory {}: {}",
+            log_dir.display(),
+            e
+        );
+    }
+    let file_appender = tracing_appender::rolling::daily(log_dir, "typex.log");
+    let (file_writer, guard) = tracing_appender::non_blocking(file_appender);
+
+    let (filter_layer, handle) =
+        tracing_subscriber::reload::Layer::new(env_filter_for_level(level));
+    tracing_subscriber::registry()
+        .with(filter_layer)
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_timer(tracing_subscriber::fmt::time::ChronoLocal::rfc_3339()),
+        )
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_timer(tracing_subscriber::fmt::time::ChronoLocal::rfc_3339())
+                .with_writer(file_writer)
+                .with_ansi(false),
+        )
+        .init();
+
+    (handle, guard)
 }
 
 fn init_db(conn: &Connection) -> rusqlite::Result<()> {
@@ -218,7 +258,9 @@ fn connection_test_result(
 fn load_provider_status(path: &Path) -> ProviderStatusStore {
     match std::fs::read_to_string(path) {
         Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
-            tracing::warn!(
+            typex_logging::log_target!(
+                Level::WARN,
+                target: "typex_desktop_lib",
                 "failed to parse provider status from {}: {}",
                 path.display(),
                 e
@@ -227,7 +269,9 @@ fn load_provider_status(path: &Path) -> ProviderStatusStore {
         }),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => ProviderStatusStore::default(),
         Err(e) => {
-            tracing::warn!(
+            typex_logging::log_target!(
+                Level::WARN,
+                target: "typex_desktop_lib",
                 "failed to read provider status from {}: {}",
                 path.display(),
                 e
@@ -473,6 +517,32 @@ fn get_system_info(state: tauri::State<AppState>) -> SystemInfo {
 }
 
 #[tauri::command]
+fn open_log_dir(app: tauri::AppHandle) -> Result<(), String> {
+    let dir = log_dir(&app);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "windows")]
+    std::process::Command::new("explorer")
+        .arg(&dir)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open")
+        .arg(&dir)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "linux")]
+    std::process::Command::new("xdg-open")
+        .arg(&dir)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
 fn minimize(window: tauri::WebviewWindow) {
     window.minimize().unwrap();
 }
@@ -562,7 +632,9 @@ fn save_connection_test_status(
     if let Some(statuses) = provider_status_for_kind_mut(&mut store, kind) {
         statuses.insert(connection_id.to_string(), test_result_to_status(result));
         if let Err(e) = save_provider_status(&state.provider_status_path, &store) {
-            tracing::warn!(
+            typex_logging::log_target!(
+                Level::WARN,
+                target: "typex_desktop_lib",
                 "failed to save provider status to {}: {}",
                 state.provider_status_path.display(),
                 e
@@ -627,7 +699,9 @@ fn save_config(state: tauri::State<AppState>, mut config: AppConfig) -> Result<(
     if reset_changed_provider_status(&old_config, &config, &mut provider_status)
         && let Err(e) = save_provider_status(&state.provider_status_path, &provider_status)
     {
-        tracing::warn!(
+        typex_logging::log_target!(
+            Level::WARN,
+            target: "typex_desktop_lib",
             "failed to save provider status to {}: {}",
             state.provider_status_path.display(),
             e
@@ -644,7 +718,35 @@ fn save_config(state: tauri::State<AppState>, mut config: AppConfig) -> Result<(
             *state.pipeline.lock().unwrap() = pipeline;
         }
         Err(e) => {
-            tracing::warn!("Pipeline rebuild failed (old pipeline kept): {}", e);
+            let old_log_text = state.pipeline.lock().unwrap().log_text();
+            if old_log_text && !config.logging.record_text {
+                let mut safe_config = old_config.clone();
+                safe_config.logging.record_text = false;
+                match build_pipeline(&safe_config) {
+                    Ok(pipeline) => {
+                        *state.pipeline.lock().unwrap() = pipeline;
+                        typex_logging::log_target!(
+                            Level::WARN,
+                            target: "typex_desktop_lib",
+                            "Pipeline rebuild failed; kept previous provider settings with raw text logging disabled: {}",
+                            e
+                        );
+                    }
+                    Err(safe_error) => {
+                        return Err(format!(
+                            "Pipeline rebuild failed after disabling raw text logging, and fallback rebuild also failed: {}; fallback error: {}",
+                            e, safe_error
+                        ));
+                    }
+                }
+            } else {
+                typex_logging::log_target!(
+                    Level::WARN,
+                    target: "typex_desktop_lib",
+                    "Pipeline rebuild failed (old pipeline kept): {}",
+                    e
+                );
+            }
         }
     }
 
@@ -860,14 +962,22 @@ fn handle_record_toggle(app: &tauri::AppHandle) {
         // the GUI event loop or a global-shortcut WndProc callback — neither
         // should ever block).
         if state.recording_starting.swap(true, Ordering::AcqRel) {
-            tracing::warn!("recording start already in progress, ignoring duplicate toggle");
+            typex_logging::log_target!(
+                Level::WARN,
+                target: "typex_desktop_lib",
+                "recording start already in progress, ignoring duplicate toggle"
+            );
             return;
         }
 
         let capture = state.capture.lock().unwrap().take();
         let Some(capture) = capture else {
             state.recording_starting.store(false, Ordering::Release);
-            tracing::warn!("no microphone capture available");
+            typex_logging::log_target!(
+                Level::WARN,
+                target: "typex_desktop_lib",
+                "no microphone capture available"
+            );
             show_overlay_error(app, "麦克风不可用，请检查音频设备设置");
             return;
         };
@@ -942,9 +1052,6 @@ fn handle_record_toggle(app: &tauri::AppHandle) {
                         _ = tick.tick() => {
                             let Some(level) = latest.take() else { continue; };
                             count += 1;
-                            if count <= 20 || count.is_multiple_of(100) {
-                                tracing::info!("audio level #{}: rms={:.4}, peak={:.4}", count, level.rms, level.peak);
-                            }
                             let rms = finite_level(level.rms);
                             let peak = finite_level(level.peak);
                             let payload = serde_json::json!({ "rms": rms, "peak": peak });
@@ -953,7 +1060,12 @@ fn handle_record_toggle(app: &tauri::AppHandle) {
                             if let Some(w) = level_app.get_webview_window("overlay") {
                                 let js = format!("window.typexAudioLevel({})", payload);
                                 if let Err(e) = w.eval(&js) && count <= 1 {
-                                    tracing::warn!("eval audio-level failed: {}", e);
+                                    typex_logging::log_target!(
+                                        Level::WARN,
+                                        target: "typex_desktop_lib",
+                                        "eval audio-level failed: {}",
+                                        e
+                                    );
                                 }
                             }
 
@@ -962,7 +1074,6 @@ fn handle_record_toggle(app: &tauri::AppHandle) {
                         }
                     }
                 }
-                tracing::info!("audio level stream ended after {} forwarded samples", count);
             });
 
             let _ = app_clone.emit("recording-state", RecordingStatePayload { recording: true });
@@ -1005,13 +1116,23 @@ async fn process_recording(app: tauri::AppHandle) {
     let acc_handle = match acc_future.await {
         Ok(Ok(handle)) => handle,
         Ok(Err(e)) => {
-            tracing::error!("recording task failed: {}", e);
+            typex_logging::log_target!(
+                Level::ERROR,
+                target: "typex_desktop_lib",
+                "recording task failed: {}",
+                e
+            );
             show_overlay_error(&app, &format!("录音任务失败: {}", e));
             let _ = app.emit("history-updated", ());
             return;
         }
         Err(e) => {
-            tracing::error!("recording task panicked: {}", e);
+            typex_logging::log_target!(
+                Level::ERROR,
+                target: "typex_desktop_lib",
+                "recording task panicked: {}",
+                e
+            );
             show_overlay_error(&app, &format!("录音任务中断: {}", e));
             let _ = app.emit("history-updated", ());
             return;
@@ -1022,13 +1143,23 @@ async fn process_recording(app: tauri::AppHandle) {
     let pcm = match acc_handle.await {
         Ok(Ok(data)) => data,
         Ok(Err(e)) => {
-            tracing::error!("PCM accumulation failed: {}", e);
+            typex_logging::log_target!(
+                Level::ERROR,
+                target: "typex_desktop_lib",
+                "PCM accumulation failed: {}",
+                e
+            );
             show_overlay_error(&app, &format!("音频处理失败: {}", e));
             let _ = app.emit("history-updated", ());
             return;
         }
         Err(e) => {
-            tracing::error!("accumulator task panicked: {}", e);
+            typex_logging::log_target!(
+                Level::ERROR,
+                target: "typex_desktop_lib",
+                "accumulator task panicked: {}",
+                e
+            );
             show_overlay_error(&app, &format!("音频处理中断: {}", e));
             let _ = app.emit("history-updated", ());
             return;
@@ -1036,20 +1167,30 @@ async fn process_recording(app: tauri::AppHandle) {
     };
 
     if pcm.is_empty() {
-        tracing::info!("no audio captured");
+        typex_logging::log_target!(Level::INFO, target: "typex_desktop_lib", "no audio captured");
         show_overlay_error(&app, "未捕获到音频，请检查麦克风权限");
         let _ = app.emit("history-updated", ());
         return;
     }
 
-    tracing::info!("captured {} bytes of PCM audio", pcm.len());
+    typex_logging::log_target!(
+        Level::DEBUG,
+        target: "typex_desktop_lib",
+        "captured {} bytes of PCM audio",
+        pcm.len()
+    );
 
     // Step 3: run pipeline (ASR → plugins → LLM → inject)
     let pipeline = state.pipeline.lock().unwrap().clone();
     let result = match pipeline.run_session(pcm).await {
         Ok(r) => r,
         Err(e) => {
-            tracing::error!("pipeline failed: {}", e);
+            typex_logging::log_target!(
+                Level::ERROR,
+                target: "typex_desktop_lib",
+                "pipeline failed: {}",
+                e
+            );
             show_overlay_error(&app, &format!("转译失败: {}", e));
             let _ = app.emit("history-updated", ());
             return;
@@ -1066,7 +1207,12 @@ async fn process_recording(app: tauri::AppHandle) {
             "INSERT INTO history (text, created_at) VALUES (?1, ?2)",
             rusqlite::params![&output_text, now],
         ) {
-            tracing::error!("failed to insert history entry: {}", e);
+            typex_logging::log_target!(
+                Level::ERROR,
+                target: "typex_desktop_lib",
+                "failed to insert history entry: {}",
+                e
+            );
         }
         prune_history(&db, limit);
         drop(db);
@@ -1098,7 +1244,13 @@ fn update_shortcut(
     }
 
     if let Err(e) = gs.unregister(old.as_str()) {
-        tracing::warn!("failed to unregister old shortcut {}: {}", old, e);
+        typex_logging::log_target!(
+            Level::WARN,
+            target: "typex_desktop_lib",
+            "failed to unregister old shortcut {}: {}",
+            old,
+            e
+        );
     }
 
     state.config.lock().unwrap().shortcut.record = shortcut.clone();
@@ -1123,24 +1275,6 @@ fn set_language(state: tauri::State<AppState>, language: String) -> Result<(), S
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Initialize tracing subscriber so log messages are visible in console.
-    // RUST_LOG takes precedence over the UI-configured log level.
-    let log_filter = match EnvFilter::try_from_default_env() {
-        Ok(env_filter) => {
-            tracing_subscriber::fmt().with_env_filter(env_filter).init();
-            None
-        }
-        Err(_) => {
-            let (filter_layer, handle) =
-                tracing_subscriber::reload::Layer::new(env_filter_for_level(LogLevel::Info));
-            tracing_subscriber::registry()
-                .with(filter_layer)
-                .with(tracing_subscriber::fmt::layer())
-                .init();
-            Some(handle)
-        }
-    };
-
     // Create a dedicated Tokio runtime that lives for the entire application
     // lifetime (run() blocks until exit). Its handle is shared with global
     // shortcut callbacks that run outside the async context.
@@ -1166,25 +1300,31 @@ pub fn run() {
             list_audio_devices,
             handle_record_toggle_cmd,
             get_system_info,
+            open_log_dir,
         ])
         .setup(move |app| {
             // Load or create config
             let cfg_path = config_path(app.handle());
             let status_path = provider_status_path(app.handle());
-            let provider_status = load_provider_status(&status_path);
             let config = if cfg_path.exists() {
                 AppConfig::load(&cfg_path).unwrap_or_else(|e| {
-                    tracing::warn!("failed to load config from {}: {}", cfg_path.display(), e);
+                    eprintln!("failed to load config from {}: {}", cfg_path.display(), e);
                     AppConfig::default()
                 })
             } else {
                 let config = AppConfig::default();
                 if let Err(e) = config.save(&cfg_path) {
-                    tracing::warn!("failed to save default config: {}", e);
+                    eprintln!("failed to save default config: {}", e);
                 }
                 config
             };
-            reload_log_filter(&log_filter, config.logging.level);
+            let (log_filter, log_guard) = init_tracing(log_dir(app.handle()), config.logging.level);
+            let provider_status = load_provider_status(&status_path);
+            typex_logging::log_target!(
+                Level::INFO,
+                target: "typex_desktop_lib",
+                "desktop logging initialized"
+            );
 
             let current_shortcut = config.shortcut.record.clone();
 
@@ -1226,11 +1366,14 @@ pub fn run() {
                 overlay_save_token: AtomicU64::new(0),
                 recording_starting: AtomicBool::new(false),
                 log_filter,
+                _log_guard: log_guard,
                 rt: rt.clone(),
             });
 
             if let Err(e) = app.global_shortcut().register(current_shortcut.as_str()) {
-                tracing::warn!(
+                typex_logging::log_target!(
+                    Level::WARN,
+                    target: "typex_desktop_lib",
                     "failed to register global shortcut {}: {}",
                     current_shortcut,
                     e

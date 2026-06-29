@@ -7,6 +7,7 @@ pub use typex_pipeline;
 pub use typex_plugin;
 
 use std::sync::Arc;
+use tracing::Level;
 use typex_asr::AsrProvider;
 use typex_config::AppConfig;
 use typex_injector::Injector;
@@ -38,13 +39,18 @@ pub fn build_typex_from_config(
     options: TypeXBuildOptions,
 ) -> anyhow::Result<TypeX> {
     let asr = create_asr_provider(config)?;
-    let mut builder = TypeX::builder(asr);
+    let mut builder = TypeX::builder(asr).log_text(config.logging.record_text);
 
     for name in &config.pipeline.plugins {
         if let Some(plugin) = create_plugin(name) {
             builder = builder.plugin(plugin);
         } else {
-            tracing::warn!("unknown plugin: {}", name);
+            typex_logging::log_target!(
+                Level::WARN,
+                target: "typex_core",
+                "unknown plugin: {}",
+                name
+            );
         }
     }
 
@@ -66,7 +72,14 @@ fn create_asr_provider(config: &AppConfig) -> anyhow::Result<Arc<dyn AsrProvider
         .ok_or_else(|| anyhow::anyhow!("active ASR connection not found"))?;
 
     match connection.provider.trim() {
-        "mock" => Ok(Arc::new(typex_asr::mock::MockAsrProvider::new())),
+        "mock" => {
+            typex_logging::log_target!(
+                Level::INFO,
+                target: "typex_asr",
+                "ASR provider initialized provider=mock",
+            );
+            Ok(Arc::new(typex_asr::mock::MockAsrProvider::new()))
+        }
         "openai-compatible" | "" => {
             let endpoint = connection
                 .endpoint
@@ -107,6 +120,16 @@ fn create_asr_provider(config: &AppConfig) -> anyhow::Result<Arc<dyn AsrProvider
                 provider = provider.with_language(lang.to_string());
             }
 
+            typex_logging::log_target!(
+                Level::INFO,
+                target: "typex_asr",
+                format!(
+                    "ASR provider initialized provider=openai-compatible model={} endpoint={}",
+                    model,
+                    typex_logging::redact_url_for_log(endpoint)
+                ),
+            );
+
             Ok(Arc::new(provider))
         }
         other => anyhow::bail!("unknown ASR provider: {}", other),
@@ -124,7 +147,14 @@ fn create_llm_provider(config: &AppConfig) -> anyhow::Result<Option<Arc<dyn LlmP
         .ok_or_else(|| anyhow::anyhow!("active LLM connection not found"))?;
 
     match connection.provider.trim() {
-        "mock" | "" => Ok(Some(Arc::new(typex_llm::mock::MockLlmProvider::new()))),
+        "mock" | "" => {
+            typex_logging::log_target!(
+                Level::INFO,
+                target: "typex_llm",
+                "LLM provider initialized provider=mock",
+            );
+            Ok(Some(Arc::new(typex_llm::mock::MockLlmProvider::new())))
+        }
         "openai-compatible" => {
             let endpoint = connection
                 .endpoint
@@ -151,19 +181,22 @@ fn create_llm_provider(config: &AppConfig) -> anyhow::Result<Option<Arc<dyn LlmP
                 .filter(|s| !s.is_empty())
                 .unwrap_or("gpt-4o-mini");
 
-            let has_key = api_key.is_some();
-            tracing::info!(
-                "LLM provider={} model={} has_api_key={}",
-                "openai-compatible",
-                model,
-                has_key
-            );
             let provider = typex_llm::openai_compat::OpenAiCompatibleLlmProvider::new(
                 endpoint.to_string(),
                 api_key,
                 model.to_string(),
             )
             .with_system_prompt(config.llm.prompt.clone().unwrap_or_default());
+
+            typex_logging::log_target!(
+                Level::INFO,
+                target: "typex_llm",
+                format!(
+                    "LLM provider initialized provider=openai-compatible model={} endpoint={}",
+                    model,
+                    typex_logging::redact_url_for_log(endpoint)
+                ),
+            );
 
             Ok(Some(Arc::new(provider)))
         }
@@ -197,17 +230,23 @@ fn create_plugin(name: &str) -> Option<Arc<dyn Plugin>> {
 /// Convenience builder for a fully-wired Pipeline.
 pub struct TypeX {
     pipeline: Pipeline,
+    log_text: bool,
 }
 
 impl TypeX {
     pub fn builder(asr: Arc<dyn AsrProvider>) -> TypeXBuilder {
         TypeXBuilder {
             pipeline: Pipeline::new(asr),
+            log_text: false,
         }
     }
 
     pub fn pipeline(&self) -> &Pipeline {
         &self.pipeline
+    }
+
+    pub fn log_text(&self) -> bool {
+        self.log_text
     }
 
     pub async fn run_session(
@@ -228,6 +267,7 @@ impl TypeX {
 
 pub struct TypeXBuilder {
     pipeline: Pipeline,
+    log_text: bool,
 }
 
 impl TypeXBuilder {
@@ -246,9 +286,16 @@ impl TypeXBuilder {
         self
     }
 
+    pub fn log_text(mut self, log_text: bool) -> Self {
+        self.pipeline = self.pipeline.with_log_text(log_text);
+        self.log_text = log_text;
+        self
+    }
+
     pub fn build(self) -> TypeX {
         TypeX {
             pipeline: self.pipeline,
+            log_text: self.log_text,
         }
     }
 }
