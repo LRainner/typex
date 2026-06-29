@@ -95,12 +95,9 @@ impl AsrProvider for OpenAiCompatibleAsrProvider {
         typex_logging::log_target!(
             tracing::Level::DEBUG,
             target: "typex_asr",
-            format!(
-                "ASR transcription request completed filename={} text_len={} text_chars={}",
-                filename,
-                text.len(),
-                text.chars().count()
-            ),
+            "ASR transcription request completed filename={} text_len={}",
+            filename,
+            text.len()
         );
         Ok(AsrResult {
             text,
@@ -251,11 +248,8 @@ async fn transcribe_segment(
     typex_logging::log_target!(
         tracing::Level::DEBUG,
         target: "typex_asr",
-        format!(
-            "ASR segment transcription completed text_len={} text_chars={}",
-            text.len(),
-            text.chars().count()
-        ),
+        "ASR segment transcription completed text_len={}",
+        text.len()
     );
     Ok(text)
 }

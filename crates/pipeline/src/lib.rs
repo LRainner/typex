@@ -273,59 +273,20 @@ fn log_pipeline_text(
     text: &str,
     record_text: bool,
 ) {
-    let logged_text = if record_text { text } else { "<redacted>" };
-    match level {
-        Level::ERROR => tracing::error!(
-            target: "typex_pipeline",
-            stage,
-            is_final,
-            plugin,
-            text = %logged_text,
-            text_len = text.len(),
-            text_chars = text.chars().count(),
-            "pipeline text"
+    let message = match plugin {
+        Some(plugin) => format!(
+            "pipeline text stage={} plugin={} is_final={}",
+            stage, plugin, is_final
         ),
-        Level::WARN => tracing::warn!(
-            target: "typex_pipeline",
-            stage,
-            is_final,
-            plugin,
-            text = %logged_text,
-            text_len = text.len(),
-            text_chars = text.chars().count(),
-            "pipeline text"
-        ),
-        Level::INFO => tracing::info!(
-            target: "typex_pipeline",
-            stage,
-            is_final,
-            plugin,
-            text = %logged_text,
-            text_len = text.len(),
-            text_chars = text.chars().count(),
-            "pipeline text"
-        ),
-        Level::DEBUG => tracing::debug!(
-            target: "typex_pipeline",
-            stage,
-            is_final,
-            plugin,
-            text = %logged_text,
-            text_len = text.len(),
-            text_chars = text.chars().count(),
-            "pipeline text"
-        ),
-        Level::TRACE => tracing::trace!(
-            target: "typex_pipeline",
-            stage,
-            is_final,
-            plugin,
-            text = %logged_text,
-            text_len = text.len(),
-            text_chars = text.chars().count(),
-            "pipeline text"
-        ),
-    }
+        None => format!("pipeline text stage={} is_final={}", stage, is_final),
+    };
+    typex_logging::log_text_target!(
+        level,
+        target: "typex_pipeline",
+        message,
+        text,
+        record_text,
+    );
 }
 
 async fn apply_plugins(

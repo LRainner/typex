@@ -118,13 +118,10 @@ impl LlmProvider for OpenAiCompatibleLlmProvider {
             typex_logging::log_target!(
                 tracing::Level::DEBUG,
                 target: "typex_llm",
-                format!(
-                    "LLM optimization request started model={} endpoint={} input_len={} input_chars={}",
-                    model,
-                    endpoint,
-                    input.len(),
-                    input.chars().count()
-                ),
+                "LLM optimization request started model={} endpoint={} input_len={}",
+                model,
+                endpoint,
+                input.len()
             );
 
             // ── 2. Build request body ──

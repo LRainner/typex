@@ -40,7 +40,6 @@ macro_rules! log_text_target {
                 target: $target,
                 text = %logged_text,
                 text_len = text.len(),
-                text_chars = text.chars().count(),
                 "{}",
                 $message
             ),
@@ -48,7 +47,6 @@ macro_rules! log_text_target {
                 target: $target,
                 text = %logged_text,
                 text_len = text.len(),
-                text_chars = text.chars().count(),
                 "{}",
                 $message
             ),
@@ -56,7 +54,6 @@ macro_rules! log_text_target {
                 target: $target,
                 text = %logged_text,
                 text_len = text.len(),
-                text_chars = text.chars().count(),
                 "{}",
                 $message
             ),
@@ -64,7 +61,6 @@ macro_rules! log_text_target {
                 target: $target,
                 text = %logged_text,
                 text_len = text.len(),
-                text_chars = text.chars().count(),
                 "{}",
                 $message
             ),
@@ -72,7 +68,6 @@ macro_rules! log_text_target {
                 target: $target,
                 text = %logged_text,
                 text_len = text.len(),
-                text_chars = text.chars().count(),
                 "{}",
                 $message
             ),
@@ -116,17 +111,21 @@ pub fn redact_url_for_log(url: &str) -> String {
         _ => return "<redacted>".into(),
     };
 
-    let rest = rest.split(['?', '#']).next().unwrap_or(rest);
-    let rest = match rest.find('@') {
-        Some(at) => rest.get(at + 1..).unwrap_or(""),
-        None => rest,
+    let (authority, path_etc) = match rest.find(['/', '?', '#']) {
+        Some(pos) => (&rest[..pos], &rest[pos..]),
+        None => (rest, ""),
     };
+    let authority = match authority.rfind('@') {
+        Some(at) => authority.get(at + 1..).unwrap_or(""),
+        None => authority,
+    };
+    let path = path_etc.split(['?', '#']).next().unwrap_or("");
 
-    if rest.is_empty() {
+    if authority.is_empty() {
         return "<redacted>".into();
     }
 
-    format!("{scheme}://{rest}")
+    format!("{scheme}://{authority}{path}")
 }
 
 #[cfg(test)]
@@ -167,5 +166,13 @@ mod tests {
     #[test]
     fn redact_url_for_log_redacts_invalid_inputs() {
         assert_eq!(redact_url_for_log("not a url"), "<redacted>");
+    }
+
+    #[test]
+    fn redact_url_for_log_preserves_at_sign_in_path() {
+        assert_eq!(
+            redact_url_for_log("https://api.example.com/v1/users/email@domain.com/profile"),
+            "https://api.example.com/v1/users/email@domain.com/profile"
+        );
     }
 }
