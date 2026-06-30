@@ -1167,7 +1167,7 @@ async fn process_recording(app: tauri::AppHandle) {
     };
 
     if pcm.is_empty() {
-        typex_logging::log_target!(Level::INFO, target: "typex_desktop_lib", "no audio captured");
+        typex_logging::log_target!(Level::WARN, target: "typex_desktop_lib", "no audio captured");
         show_overlay_error(&app, "未捕获到音频，请检查麦克风权限");
         let _ = app.emit("history-updated", ());
         return;

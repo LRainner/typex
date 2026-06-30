@@ -48,7 +48,7 @@ impl MicrophoneCapture {
     pub fn start(&self) -> Result<(cpal::Stream, BoxStream<'static, Result<Bytes>>)> {
         let (stream, raw_rx, info) = self.setup_device_and_stream()?;
         typex_logging::log_target!(
-            Level::INFO,
+            Level::DEBUG,
             target: "typex_audio",
             "microphone capture started, press Ctrl+C to stop"
         );
@@ -71,7 +71,7 @@ impl MicrophoneCapture {
     ) -> Result<SessionRecorder> {
         let (stream, raw_rx, info) = self.setup_device_and_stream()?;
         typex_logging::log_target!(
-            Level::INFO,
+            Level::DEBUG,
             target: "typex_audio",
             "session recording started"
         );
@@ -124,7 +124,7 @@ impl MicrophoneCapture {
             .map(|d| d.to_string())
             .unwrap_or_default();
         typex_logging::log_target!(
-            Level::INFO,
+            Level::DEBUG,
             target: "typex_audio",
             "using audio device: {}",
             device_desc
@@ -134,7 +134,7 @@ impl MicrophoneCapture {
         let input_sample_rate: u32 = supported_config.sample_rate();
         let channels = supported_config.channels() as usize;
         typex_logging::log_target!(
-            Level::INFO,
+            Level::DEBUG,
             target: "typex_audio",
             "device sample rate: {}Hz, channels: {}, sample format: {:?}, target: {}Hz",
             input_sample_rate,
