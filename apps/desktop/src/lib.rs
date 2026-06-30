@@ -21,9 +21,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tracing::Level;
 use tracing_subscriber::{EnvFilter, Registry, prelude::*};
 use typex_config::{AppConfig, AsrConnection, LlmConnection, LogLevel};
-use typex_core::typex_asr::AsrProvider;
-use typex_core::typex_llm::LlmProvider;
-use typex_core::{TypeX, TypeXBuildOptions, build_typex_from_config};
+use typex_core::{ProviderFactory, TypeX, TypeXBuildOptions, build_typex_from_config};
 
 /// The spawn_blocking task returns this handle once the recording stop signal is received.
 /// Awaiting it yields the accumulator JoinHandle, which in turn yields the PCM data.
@@ -209,15 +207,6 @@ fn trimmed_option(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-}
-
-fn api_key_or_env(value: Option<String>) -> Option<String> {
-    trimmed_option(value).or_else(|| {
-        std::env::var("OPENAI_API_KEY")
-            .ok()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-    })
 }
 
 fn sanitize_connection_error(error: impl std::fmt::Display) -> String {
@@ -644,17 +633,18 @@ fn save_connection_test_status(
 }
 
 async fn test_openai_compatible_asr(request: ConnectionTestRequest) -> anyhow::Result<String> {
-    let endpoint =
-        trimmed_option(request.endpoint).unwrap_or_else(|| "https://api.openai.com/v1".to_string());
-    let api_key = api_key_or_env(request.api_key);
-    let model = trimmed_option(request.model).unwrap_or_else(|| "whisper-1".to_string());
-    let mut provider = typex_core::typex_asr::openai_compat::OpenAiCompatibleAsrProvider::new(
-        endpoint, api_key, model,
-    );
-
-    if let Some(language) = trimmed_option(request.language) {
-        provider = provider.with_language(language);
-    }
+    let connection = AsrConnection {
+        id: request
+            .connection_id
+            .unwrap_or_else(|| "connection-test".into()),
+        name: "Connection test".into(),
+        provider: request.provider,
+        endpoint: trimmed_option(request.endpoint),
+        model: trimmed_option(request.model),
+        api_key: trimmed_option(request.api_key),
+        language: trimmed_option(request.language),
+    };
+    let provider = ProviderFactory::asr_from_connection(&connection)?;
 
     let pcm = vec![0_u8; 16_000 * 2];
     let wav = typex_core::typex_asr::pcm_to_wav(&pcm)?;
@@ -666,13 +656,18 @@ async fn test_openai_compatible_asr(request: ConnectionTestRequest) -> anyhow::R
 }
 
 async fn test_openai_compatible_llm(request: ConnectionTestRequest) -> anyhow::Result<String> {
-    let endpoint =
-        trimmed_option(request.endpoint).unwrap_or_else(|| "https://api.openai.com/v1".to_string());
-    let api_key = api_key_or_env(request.api_key);
-    let model = trimmed_option(request.model).unwrap_or_else(|| "gpt-4o-mini".to_string());
-    let provider = typex_core::typex_llm::openai_compat::OpenAiCompatibleLlmProvider::new(
-        endpoint, api_key, model,
-    );
+    let connection = LlmConnection {
+        id: request
+            .connection_id
+            .unwrap_or_else(|| "connection-test".into()),
+        name: "Connection test".into(),
+        provider: request.provider,
+        endpoint: trimmed_option(request.endpoint),
+        model: trimmed_option(request.model),
+        api_key: trimmed_option(request.api_key),
+    };
+    let provider = ProviderFactory::llm_from_connection(&connection, None, true)?
+        .ok_or_else(|| anyhow::anyhow!("LLM provider is disabled"))?;
 
     let input = stream::once(async { Ok("ping".to_string()) }).boxed();
     let mut output = provider.optimize(input);
