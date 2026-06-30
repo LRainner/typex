@@ -19,8 +19,12 @@ impl Injector for PlatformInjector {
         #[cfg(target_os = "linux")]
         let platform = "linux";
 
+        // Keep this as a warning while platform injection is a stub: selecting
+        // this injector does not actually deliver text to the active app yet.
+        // When real platform injection is implemented, remove this warning or
+        // lower the success-path log back to DEBUG.
         typex_logging::log_text_target!(
-            Level::DEBUG,
+            Level::WARN,
             target: "typex_injector",
             format!("platform injector stub platform={platform}"),
             text,
