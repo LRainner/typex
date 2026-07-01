@@ -6,6 +6,7 @@ use typex_config::{AppConfig, AsrConnection, LlmConnection};
 use typex_injector::Injector;
 use typex_llm::LlmProvider;
 use typex_plugin::Plugin;
+use typex_provider::{ProviderError, ProviderErrorKind, ProviderService};
 
 use crate::{TypeX, TypeXBuildOptions};
 
@@ -59,10 +60,14 @@ pub struct ProviderFactory;
 
 impl ProviderFactory {
     pub fn asr_from_config(config: &AppConfig) -> anyhow::Result<Arc<dyn AsrProvider>> {
-        let connection = config
-            .asr
-            .active_connection_config()
-            .ok_or_else(|| anyhow::anyhow!("active ASR connection not found"))?;
+        let connection = config.asr.active_connection_config().ok_or_else(|| {
+            ProviderError::new(
+                ProviderService::Asr,
+                config.asr.provider.trim(),
+                ProviderErrorKind::InvalidConfig,
+                "active ASR connection not found",
+            )
+        })?;
         Self::asr_from_connection(connection)
     }
 
@@ -128,7 +133,13 @@ impl ProviderFactory {
 
                 Ok(Arc::new(provider))
             }
-            other => anyhow::bail!("unknown ASR provider: {}", other),
+            other => Err(ProviderError::new(
+                ProviderService::Asr,
+                other,
+                ProviderErrorKind::UnsupportedProvider,
+                format!("unknown ASR provider: {other}"),
+            )
+            .into()),
         }
     }
 
@@ -137,10 +148,14 @@ impl ProviderFactory {
             return Ok(None);
         }
 
-        let connection = config
-            .llm
-            .active_connection_config()
-            .ok_or_else(|| anyhow::anyhow!("active LLM connection not found"))?;
+        let connection = config.llm.active_connection_config().ok_or_else(|| {
+            ProviderError::new(
+                ProviderService::Llm,
+                config.llm.provider.trim(),
+                ProviderErrorKind::InvalidConfig,
+                "active LLM connection not found",
+            )
+        })?;
         Self::llm_from_connection(connection, config.llm.prompt.as_deref(), true)
     }
 
@@ -207,7 +222,13 @@ impl ProviderFactory {
 
                 Ok(Some(Arc::new(provider)))
             }
-            other => anyhow::bail!("unknown LLM provider: {}", other),
+            other => Err(ProviderError::new(
+                ProviderService::Llm,
+                other,
+                ProviderErrorKind::UnsupportedProvider,
+                format!("unknown LLM provider: {other}"),
+            )
+            .into()),
         }
     }
 

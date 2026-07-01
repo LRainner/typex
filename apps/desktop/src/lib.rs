@@ -21,7 +21,10 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tracing::Level;
 use tracing_subscriber::{EnvFilter, Registry, prelude::*};
 use typex_config::{AppConfig, AsrConnection, LlmConnection, LogLevel};
-use typex_core::{ProviderFactory, TypeX, TypeXBuildOptions, build_typex_from_config};
+use typex_core::{
+    ProviderError, ProviderErrorKind, ProviderFactory, ProviderService, TypeX, TypeXBuildOptions,
+    build_typex_from_config, find_provider_error,
+};
 
 /// The spawn_blocking task returns this handle once the recording stop signal is received.
 /// Awaiting it yields the accumulator JoinHandle, which in turn yields the PCM data.
@@ -117,13 +120,14 @@ fn init_tracing(log_dir: std::path::PathBuf, level: LogLevel) -> (LogReloadHandl
         tracing_subscriber::reload::Layer::new(env_filter_for_level(level));
     tracing_subscriber::registry()
         .with(filter_layer)
+        .with(tracing_subscriber::fmt::layer().with_timer(
+            tracing_subscriber::fmt::time::ChronoLocal::new("%Y-%m-%dT%H:%M:%S%.3f%:z".to_string()),
+        ))
         .with(
             tracing_subscriber::fmt::layer()
-                .with_timer(tracing_subscriber::fmt::time::ChronoLocal::rfc_3339()),
-        )
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_timer(tracing_subscriber::fmt::time::ChronoLocal::rfc_3339())
+                .with_timer(tracing_subscriber::fmt::time::ChronoLocal::new(
+                    "%Y-%m-%dT%H:%M:%S%.3f%:z".to_string(),
+                ))
                 .with_writer(file_writer)
                 .with_ansi(false),
         )
@@ -219,7 +223,7 @@ fn sanitize_connection_error(error: impl std::fmt::Display) -> String {
         message.truncate(limit);
         message.push('…');
     }
-    format!("Connection failed: {}", message)
+    message
 }
 
 fn connection_test_result(
@@ -234,13 +238,18 @@ fn connection_test_result(
             tested_at: None,
             message_key: Some("settings.connection_success".into()),
         },
-        Err(error) => ConnectionTestResult {
-            ok: false,
-            message: sanitize_connection_error(error),
-            provider,
-            tested_at: None,
-            message_key: None,
-        },
+        Err(error) => {
+            let message_key = find_provider_error(&error)
+                .map(|error| error.message_key())
+                .unwrap_or("settings.connection_failed");
+            ConnectionTestResult {
+                ok: false,
+                message: sanitize_connection_error(error),
+                provider,
+                tested_at: None,
+                message_key: Some(message_key.into()),
+            }
+        }
     }
 }
 
@@ -572,7 +581,13 @@ async fn test_asr_connection(
     let result = match provider.as_str() {
         "mock" => Ok("Mock ASR is available.".to_string()),
         "openai-compatible" | "" => test_openai_compatible_asr(request).await,
-        other => Err(anyhow::anyhow!("unsupported ASR provider: {}", other)),
+        other => Err(ProviderError::new(
+            ProviderService::Asr,
+            other,
+            ProviderErrorKind::UnsupportedProvider,
+            format!("unsupported ASR provider: {other}"),
+        )
+        .into()),
     };
     let mut result = connection_test_result(provider, result);
     if result.ok && result.provider == "mock" {
@@ -599,7 +614,13 @@ async fn test_llm_connection(
     let result = match provider.as_str() {
         "mock" | "" => Ok("Mock LLM is available.".to_string()),
         "openai-compatible" => test_openai_compatible_llm(request).await,
-        other => Err(anyhow::anyhow!("unsupported LLM provider: {}", other)),
+        other => Err(ProviderError::new(
+            ProviderService::Llm,
+            other,
+            ProviderErrorKind::UnsupportedProvider,
+            format!("unsupported LLM provider: {other}"),
+        )
+        .into()),
     };
     let mut result = connection_test_result(provider, result);
     if result.ok && result.provider == "mock" {
@@ -666,8 +687,15 @@ async fn test_openai_compatible_llm(request: ConnectionTestRequest) -> anyhow::R
         model: trimmed_option(request.model),
         api_key: trimmed_option(request.api_key),
     };
-    let provider = ProviderFactory::llm_from_connection(&connection, None, true)?
-        .ok_or_else(|| anyhow::anyhow!("LLM provider is disabled"))?;
+    let provider =
+        ProviderFactory::llm_from_connection(&connection, None, true)?.ok_or_else(|| {
+            ProviderError::new(
+                ProviderService::Llm,
+                "openai-compatible",
+                ProviderErrorKind::InvalidConfig,
+                "LLM provider is disabled",
+            )
+        })?;
 
     let input = stream::once(async { Ok("ping".to_string()) }).boxed();
     let mut output = provider.optimize(input);
@@ -678,7 +706,13 @@ async fn test_openai_compatible_llm(request: ConnectionTestRequest) -> anyhow::R
         }
     }
 
-    anyhow::bail!("provider returned no response")
+    Err(ProviderError::new(
+        ProviderService::Llm,
+        "openai-compatible",
+        ProviderErrorKind::EmptyResponse,
+        "provider returned no response",
+    )
+    .into())
 }
 
 #[tauri::command]
