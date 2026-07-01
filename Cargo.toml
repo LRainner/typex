@@ -7,6 +7,7 @@ members = [
     "crates/pipeline",
     "crates/injector",
     "crates/config",
+    "crates/provider",
     "crates/logging",
     "crates/plugin",
     "crates/audio",
@@ -51,6 +52,7 @@ typex-llm = { path = "crates/llm" }
 typex-pipeline = { path = "crates/pipeline" }
 typex-injector = { path = "crates/injector" }
 typex-config = { path = "crates/config" }
+typex-provider = { path = "crates/provider" }
 typex-logging = { path = "crates/logging" }
 typex-plugin = { path = "crates/plugin" }
 typex-audio = { path = "crates/audio" }

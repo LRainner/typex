@@ -4682,6 +4682,7 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "typex-logging",
+ "typex-provider",
 ]
 
 [[package]]
@@ -4747,6 +4748,7 @@ dependencies = [
  "typex-logging",
  "typex-pipeline",
  "typex-plugin",
+ "typex-provider",
 ]
 
 [[package]]
@@ -4800,6 +4802,7 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "typex-logging",
+ "typex-provider",
 ]
 
 [[package]]
@@ -4834,6 +4837,14 @@ dependencies = [
  "async-trait",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "typex-provider"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

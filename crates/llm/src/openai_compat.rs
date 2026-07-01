@@ -3,6 +3,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use futures::stream::{BoxStream, StreamExt};
 use serde::Deserialize;
+use typex_provider::{ProviderError, ProviderErrorKind, ProviderService, kind_from_http_status};
 
 /// Default system prompt for text optimization.
 const DEFAULT_SYSTEM_PROMPT: &str = "\
@@ -151,9 +152,7 @@ impl LlmProvider for OpenAiCompatibleLlmProvider {
             let resp = match req.json(&body).send().await {
                 Ok(r) => r,
                 Err(e) => {
-                    let _ = tx
-                        .send(Err(anyhow::anyhow!("LLM API request failed: {}", e)))
-                        .await;
+                    let _ = tx.send(Err(map_request_error(e).into())).await;
                     return;
                 }
             };
@@ -162,11 +161,18 @@ impl LlmProvider for OpenAiCompatibleLlmProvider {
             if !status.is_success() {
                 let body = resp.text().await.unwrap_or_default();
                 let _ = tx
-                    .send(Err(anyhow::anyhow!(
-                        "LLM API error {}: {}",
-                        status,
-                        typex_logging::text_preview(&body, 200)
-                    )))
+                    .send(Err(ProviderError::new(
+                        ProviderService::Llm,
+                        "openai-compatible",
+                        kind_from_http_status(status.as_u16()),
+                        format!(
+                            "LLM API error {}: {}",
+                            status,
+                            typex_logging::text_preview(&body, 200)
+                        ),
+                    )
+                    .with_status(status.as_u16())
+                    .into()))
                     .await;
                 return;
             }
@@ -184,7 +190,15 @@ impl LlmProvider for OpenAiCompatibleLlmProvider {
                 let bytes = match result {
                     Ok(b) => b,
                     Err(e) => {
-                        let _ = tx.send(Err(anyhow::anyhow!("SSE read error: {}", e))).await;
+                        let _ = tx
+                            .send(Err(ProviderError::new(
+                                ProviderService::Llm,
+                                "openai-compatible",
+                                ProviderErrorKind::Stream,
+                                format!("SSE read error: {e}"),
+                            )
+                            .into()))
+                            .await;
                         return;
                     }
                 };
@@ -266,6 +280,23 @@ impl LlmProvider for OpenAiCompatibleLlmProvider {
 
 fn chat_url(endpoint: &str) -> String {
     format!("{}/chat/completions", endpoint.trim_end_matches('/'))
+}
+
+fn map_request_error(error: reqwest::Error) -> ProviderError {
+    let kind = if error.is_timeout() {
+        ProviderErrorKind::Timeout
+    } else if error.is_builder() {
+        ProviderErrorKind::InvalidEndpoint
+    } else {
+        ProviderErrorKind::Network
+    };
+
+    ProviderError::new(
+        ProviderService::Llm,
+        "openai-compatible",
+        kind,
+        format!("LLM API request failed: {error}"),
+    )
 }
 
 #[cfg(test)]

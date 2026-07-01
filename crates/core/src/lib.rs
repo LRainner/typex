@@ -5,10 +5,12 @@ pub use typex_injector;
 pub use typex_llm;
 pub use typex_pipeline;
 pub use typex_plugin;
+pub use typex_provider;
 
 mod services;
 
 pub use services::{AppServices, ProviderFactory};
+pub use typex_provider::{ProviderError, ProviderErrorKind, ProviderService, find_provider_error};
 
 use std::sync::Arc;
 use typex_asr::AsrProvider;

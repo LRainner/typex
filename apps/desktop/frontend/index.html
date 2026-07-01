@@ -1792,6 +1792,19 @@
       return typexI18n.t('settings.connection_last_tested_at').replace('{0}', date.toLocaleString());
     }
 
+    function formatConnectionMessage(message, messageKey, ok) {
+      const detail = message || '';
+      if (!messageKey) {
+        if (detail) return detail;
+        return ok ? typexI18n.t('settings.connection_success') : typexI18n.t('settings.connection_failed');
+      }
+      const summary = typexI18n.t(messageKey);
+      if (!ok) {
+        return detail ? `${summary}: ${detail}` : summary;
+      }
+      return summary;
+    }
+
     function setConnectionTestStatus(kind, state, message, timestamp, messageKey = '') {
       const statusEl = document.getElementById(`${kind}-test-status`);
       const timeEl = document.getElementById(`${kind}-test-time`);
@@ -1802,9 +1815,11 @@
       if (state) statusEl.classList.add(state);
       statusEl.dataset.messageKey = messageKey || '';
       statusEl.dataset.fallbackMessage = message || '';
-      statusEl.textContent = messageKey
-        ? typexI18n.t(messageKey)
-        : (message || typexI18n.t('settings.connection_not_tested'));
+      statusEl.textContent = formatConnectionMessage(
+        message,
+        messageKey,
+        state === 'success'
+      );
       timeEl.dataset.timestamp = timestamp || '';
       timeEl.textContent = formatRelativeTestTime(timestamp);
       button.disabled = state === 'testing';
@@ -1827,9 +1842,9 @@
     }
 
     function connectionTestMessage(result) {
-      if (result?.message_key) return typexI18n.t(result.message_key);
-      if (result?.ok) return typexI18n.t('settings.connection_success');
-      return result?.message || typexI18n.t('settings.connection_failed');
+      if (result?.message) return result.message;
+      if (result?.ok) return '';
+      return typexI18n.t('settings.connection_failed');
     }
 
     function renderConnectionTestStatus(kind, status) {
@@ -1855,9 +1870,11 @@
 
         const messageKey = statusEl.dataset.messageKey || '';
         const fallbackMessage = statusEl.dataset.fallbackMessage || '';
-        statusEl.textContent = messageKey
-          ? typexI18n.t(messageKey)
-          : (fallbackMessage || typexI18n.t('settings.connection_not_tested'));
+        statusEl.textContent = formatConnectionMessage(
+          fallbackMessage,
+          messageKey,
+          statusEl.classList.contains('success')
+        );
         timeEl.textContent = formatRelativeTestTime(timeEl.dataset.timestamp || null);
         if (!button.disabled) button.textContent = typexI18n.t('settings.test_connection');
       });

@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures::stream::{BoxStream, StreamExt};
 use serde::Deserialize;
+use typex_provider::{ProviderError, ProviderErrorKind, ProviderService, kind_from_http_status};
 
 // PCM format: 16kHz, 16-bit, mono — Whisper API standard
 const SAMPLE_RATE: u32 = 16000;
@@ -268,20 +269,55 @@ async fn post_transcription(
     if let Some(key) = api_key.map(|s| s.trim()).filter(|s| !s.is_empty()) {
         req = req.bearer_auth(key);
     }
-    let resp = req.multipart(form).send().await?;
+    let resp = req
+        .multipart(form)
+        .send()
+        .await
+        .map_err(map_request_error)?;
 
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!(
-            "API error {}: {}",
-            status,
-            typex_logging::text_preview(&body, 200)
-        );
+        return Err(ProviderError::new(
+            ProviderService::Asr,
+            "openai-compatible",
+            kind_from_http_status(status.as_u16()),
+            format!(
+                "API error {}: {}",
+                status,
+                typex_logging::text_preview(&body, 200)
+            ),
+        )
+        .with_status(status.as_u16())
+        .into());
     }
 
-    let result: TranscriptionResponse = resp.json().await?;
+    let result: TranscriptionResponse = resp.json().await.map_err(|e| {
+        ProviderError::new(
+            ProviderService::Asr,
+            "openai-compatible",
+            ProviderErrorKind::InvalidResponse,
+            format!("failed to parse API response: {e}"),
+        )
+    })?;
     Ok(result.text.trim().to_string())
+}
+
+fn map_request_error(error: reqwest::Error) -> ProviderError {
+    let kind = if error.is_timeout() {
+        ProviderErrorKind::Timeout
+    } else if error.is_builder() {
+        ProviderErrorKind::InvalidEndpoint
+    } else {
+        ProviderErrorKind::Network
+    };
+
+    ProviderError::new(
+        ProviderService::Asr,
+        "openai-compatible",
+        kind,
+        format!("API request failed: {error}"),
+    )
 }
 
 fn guess_mime(filename: &str) -> &'static str {
